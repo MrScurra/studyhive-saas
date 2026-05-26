@@ -1,0 +1,307 @@
+/* StudyHive Sidebar */
+/* Left navigation and right study-circle panel styles. */
+
+.sidebar-left {
+    background-color: var(--cream-bg);
+    border-radius: 12px;
+    padding: 20px;
+    height: fit-content;
+    top: 100px;
+    position: sticky;
+}
+
+.nav-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 15px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background-color: transparent;
+}
+
+.nav-item:hover {
+    background-color: #f0e6d0;
+}
+
+.nav-item.active {
+    background-color: var(--cream-bg);
+    border-left: 4px solid var(--primary-yellow);
+    padding-left: 11px;
+}
+
+.nav-icon {
+    font-size: 24px;
+    min-width: 30px;
+}
+
+.nav-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.nav-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-dark);
+}
+
+.nav-subtitle {
+    font-size: 12px;
+    color: var(--text-light);
+}
+
+.sidebar-right {
+    background-color: var(--cream-bg);
+    border-radius: 12px;
+    padding: 20px;
+    height: fit-content;
+    top: 100px;
+    position: sticky;
+}
+
+.study-circles-section {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.section-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-dark);
+    margin-bottom: 5px;
+}
+
+.new-circle-btn {
+    width: 100%;
+    padding: 10px;
+    background-color: var(--success-green);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.3s ease;
+}
+
+.new-circle-btn:hover {
+    background-color: #45a049;
+    transform: translateY(-2px);
+}
+
+.circles-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.circle-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.circle-item:hover {
+    background-color: #f0e6d0;
+}
+
+.circle-icon {
+    font-size: 20px;
+    min-width: 30px;
+}
+
+.circle-name {
+    font-size: 13px;
+    color: var(--text-dark);
+    font-weight: 500;
+}
+
+.active-section {
+    border-top: 1px solid var(--border-color);
+    padding-top: 15px;
+    margin-top: 10px;
+}
+
+.section-subtitle {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-dark);
+    margin-bottom: 8px;
+}
+
+.active-members {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.member-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--text-dark);
+    transition: all 0.3s ease;
+}
+
+.member-item:hover {
+    background-color: #f0e6d0;
+}
+
+.active-empty-state {
+    margin: 0;
+    padding: 6px 8px;
+    color: var(--text-light);
+    font-size: 12px;
+    line-height: 1.4;
+}
+
+body.dark-mode .active-empty-state {
+    color: #aaaaaa;
+}
+
+.add-member-btn,
+.leave-circle-btn,
+.delete-circle-btn {
+    width: 100%;
+    min-height: 34px;
+    margin-top: 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.add-member-btn {
+    border: 1px solid var(--success-green);
+    background-color: var(--success-green);
+    color: #ffffff;
+}
+
+.add-member-btn:hover:not(:disabled) {
+    background-color: #45a049;
+    border-color: #45a049;
+}
+
+.leave-circle-btn,
+.delete-circle-btn {
+    border: 1px solid #d32f2f;
+    background-color: transparent;
+    color: #d32f2f;
+}
+
+.leave-circle-btn:hover:not(:disabled),
+.delete-circle-btn:hover:not(:disabled) {
+    background-color: #d32f2f;
+    color: #ffffff;
+}
+
+.add-member-btn:disabled,
+.leave-circle-btn:disabled,
+.delete-circle-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--success-green);
+}
+
+body.dark-mode .sidebar-left,
+body.dark-mode .sidebar-right {
+    background-color: #242424;
+    color: #e8e8e8;
+    border-color: #3a3a3a;
+}
+
+body.dark-mode .nav-item,
+body.dark-mode .circle-item,
+body.dark-mode .member-item {
+    background-color: transparent;
+}
+
+body.dark-mode .add-member-btn {
+    border-color: #4d9e3f;
+    background-color: #4d9e3f;
+    color: #ffffff;
+}
+
+body.dark-mode .leave-circle-btn,
+body.dark-mode .delete-circle-btn {
+    border-color: #ef5350;
+    color: #ef5350;
+}
+
+body.dark-mode .nav-item:hover,
+body.dark-mode .circle-item:hover,
+body.dark-mode .member-item:hover {
+    background-color: #272727;
+}
+
+body.dark-mode .nav-item.active {
+    background-color: #252525;
+    border-color: var(--primary-yellow);
+}
+
+body.dark-mode .nav-title,
+body.dark-mode .nav-subtitle,
+body.dark-mode .section-title,
+body.dark-mode .section-subtitle,
+body.dark-mode .member-item,
+body.dark-mode .circle-name {
+    color: #e8e8e8;
+}
+
+body.dark-mode .active-section {
+    border-color: #3a3a3a;
+}
+
+body.dark-mode .new-circle-btn {
+    background-color: #4d9e3f;
+}
+
+body.dark-mode .status-dot {
+    background-color: #4caf50;
+}
+
+@media (max-width: 768px) {
+    .sidebar-right {
+        display: none;
+    }
+
+    .sidebar-left {
+        position: static;
+        display: block;
+        padding: 10px;
+        overflow-x: auto;
+    }
+
+    .nav-menu {
+        flex-direction: row;
+        min-width: max-content;
+    }
+
+    .nav-item {
+        min-width: 132px;
+    }
+}

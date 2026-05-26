@@ -1,0 +1,30 @@
+{
+  "lhilkevinmendoza@gmail.com": {
+    "displayName": "TestingA",
+    "bio": "Testing testing",
+    "avatarUrl": "http://localhost:5000/api/profile/avatar/1779788827296-6q5dbm.jpg",
+    "username": "Dayokdok",
+    "school": "StudyHive University",
+    "course": "BS Computer Science",
+    "yearLevel": "2nd Year",
+    "skills": [],
+    "email": "lhilkevinmendoza@gmail.com",
+    "createdAt": "2026-05-26T09:23:17.864Z",
+    "updatedAt": "2026-05-26T10:41:44.005Z",
+    "fullName": "Lhil Nash"
+  },
+  "mrscurra13@gmail.com": {
+    "displayName": "TestingB",
+    "fullName": "Kevin Nash",
+    "bio": "Hey there! I am using StudyHive to collaborate.",
+    "avatarUrl": "http://localhost:5000/api/profile/avatar/1779791507836-jrgfbr.png",
+    "username": "studyhiveuser",
+    "school": "StudyHive University",
+    "course": "BS Computer Science",
+    "yearLevel": "1st Year",
+    "skills": [],
+    "email": "mrscurra13@gmail.com",
+    "createdAt": "2026-05-26T10:31:47.842Z",
+    "updatedAt": "2026-05-26T10:39:37.256Z"
+  }
+}

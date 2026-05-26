@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StudyHive - Login</title>
+  <link rel="stylesheet" href="Login.css">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+
+</head>
+
+<body>
+  <div class="container">
+    <div class="left-section">
+      <div class="logo">
+        <img src="./frontend/assets/images/studyhive-logo.png" alt="StudyHive Logo">
+      </div>
+      <div class="tagline">Come on, Let's Study!</div>
+    </div>
+
+    <div class="right-section">
+      <div class="login-card">
+        <h1>StudyHive</h1>
+
+        <div id="loginView">
+          <form>
+            <div class="form-group">
+              <label for="email">Email Address</label>
+              <input type="email" id="email" name="email" placeholder="Email or Phone Number" required>
+            </div>
+
+            <div class="form-group">
+              <label for="password">Password</label>
+              <input type="password" id="password" name="password" placeholder="••••••••" required>
+            </div>
+            <div id="loginErrorContainer" class="error-container"></div>
+
+            <div class="forgot-password">
+              <a href="#forgot">Forgot Password?</a>
+            </div>
+
+            <button type="submit" class="login-btn">Log in</button>
+          </form>
+
+          <div class="oauth-container">
+            <button type="button" id="googleBtn" class="oauth-btn google-btn">
+              <img src="./frontend/assets/images/google-logo.png" alt="Google" class="google-logo">
+              <span>Continue with Google</span>
+            </button>
+          </div>
+
+          <div class="signup-link">
+            Don't have an account? <button type="button" class="link-button" id="showSignup">Sign Up</button>
+          </div>
+        </div>
+
+        <div id="signupView" class="hidden">
+          <form>
+            <div class="form-group">
+              <label for="name">Full Name</label>
+              <input type="text" id="name" name="name" placeholder="Full Name" required>
+            </div>
+
+            <div class="form-group">
+              <label for="signup-email">Email Address</label>
+              <input type="email" id="signup-email" name="signup-email" placeholder="Email or Phone Number" required>
+            </div>
+
+            <div class="form-group">
+              <label for="signup-password">Password</label>
+              <input type="password" id="signup-password" name="signup-password" placeholder="••••••••" required>
+            </div>
+
+            <div class="form-group">
+              <label for="confirm-password">Confirm Password</label>
+              <input type="password" id="confirm-password" name="confirm-password" placeholder="••••••••" required>
+            </div>
+            <div id="signupErrorContainer" class="error-container"></div>
+
+            <button type="submit" class="login-btn">Sign Up</button>
+          </form>
+
+          <div class="oauth-container">
+            <button type="button" id="googleBtnSignup" class="oauth-btn google-btn">
+              <img src="./frontend/assets/images/google-logo.png" alt="Google" class="google-logo">
+              <span>Continue with Google</span>
+            </button>
+          </div>
+
+          <div class="signup-link">
+            Already have an account? <button type="button" class="link-button" id="showLogin">Log In</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./login.js"></script>
+</body>
+</html>

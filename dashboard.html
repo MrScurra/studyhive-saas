@@ -1,0 +1,895 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StudyHive - Study Collaboration Dashboard</title>
+    <link rel="stylesheet" href="dashboard.css">
+    <link rel="stylesheet" href="user-menu.css">
+    <link rel="stylesheet" href="sidebar.css">
+    <link rel="stylesheet" href="post-interactions.css">
+    <link rel="stylesheet" href="notifications.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-container">
+            <div class="logo">
+                <img src="./frontend/assets/images/studyhive-logo.png" alt="StudyHive Logo" class="logo-img">
+                <span class="logo-text">StudyHive</span>
+            </div>
+            <div class="search-bar" id="globalSearch">
+                <input type="text" id="globalSearchInput" placeholder="Search reviewers, subjects, tags, or groups..." autocomplete="off" aria-label="Search StudyHive" aria-expanded="false" aria-controls="globalSearchResults">
+                <button class="search-btn" id="globalSearchButton" type="button" aria-label="Search">🔍</button>
+                <div class="search-results-dropdown" id="globalSearchResults" role="listbox" aria-label="Search results" hidden>
+                    <div class="search-results-status" id="globalSearchStatus">Start typing to search StudyHive</div>
+                    <div class="search-results-content" id="globalSearchContent"></div>
+                </div>
+            </div>
+            <!-- Notifications Bell -->
+            <div class="notifications-container" id="notificationsContainer">
+                <button class="notification-bell" id="notificationBell" type="button" aria-label="Notifications" aria-expanded="false">
+                    <span class="bell-icon">🔔</span>
+                    <span class="notification-badge" id="notificationBadge" style="display: none;">0</span>
+                </button>
+                <div class="notifications-dropdown" id="notificationsDropdown" aria-label="Notifications panel" aria-hidden="true">
+                    <div class="notifications-header">
+                        <h3>Notifications</h3>
+                        <div class="notification-header-actions">
+                            <button class="mark-all-read-btn" id="markAllReadBtn" type="button">Mark all as read</button>
+                            <button class="mark-all-read-btn clear-notifications-btn" id="clearNotificationsBtn" type="button">Clear</button>
+                        </div>
+                    </div>
+                    <div class="notifications-list" id="notificationsList">
+                        <!-- Notifications will be inserted here -->
+                    </div>
+                    <div class="notifications-empty" id="notificationsEmpty" style="display: none;">
+                        <p>No notifications yet</p>
+                    </div>
+                </div>
+            </div>
+            <div class="user-profile" id="profileToggle" tabindex="0">
+                <img src="./frontend/assets/profile-picture/default-profile-picture.webp" alt="User Avatar" class="avatar">
+                <span class="user-name">Girly R.</span>
+                <div class="profile-menu" id="profileMenu" aria-label="User profile menu">
+                    <button class="profile-menu-item" type="button">
+                        <span>👤</span>
+                        <span>User Profile / Edit</span>
+                    </button>
+                    <button class="profile-menu-item" type="button">
+                        <span>⚙️</span>
+                        <span>Settings & Privacy</span>
+                    </button>
+                    <button class="profile-menu-item" type="button">
+                        <span>❓</span>
+                        <span>Help & Support</span>
+                    </button>
+                    <button class="profile-menu-item" type="button">
+                        <span>🚨</span>
+                        <span>Report a Problem</span>
+                    </button>
+                    <button class="profile-menu-item profile-menu-logout" type="button">
+                        <span>🔓</span>
+                        <span>Log Out</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="main-container">
+        <!-- Sidebar Left -->
+        <aside class="sidebar-left">
+            <nav class="nav-menu">
+                <div class="nav-item active" data-section="feed" role="button" tabindex="0">
+                    <span class="nav-icon">🏠</span>
+                    <div class="nav-content">
+                        <span class="nav-title">Feed</span>
+                        <span class="nav-subtitle">Timeline</span>
+                    </div>
+                </div>
+                <div class="nav-item" data-section="inbox" role="button" tabindex="0">
+                    <span class="nav-icon">💬</span>
+                    <div class="nav-content">
+                        <span class="nav-title">Inbox</span>
+                        <span class="nav-subtitle">Workspace</span>
+                    </div>
+                </div>
+                <div class="nav-item" data-section="saved" role="button" tabindex="0">
+                    <span class="nav-icon">📚</span>
+                    <div class="nav-content">
+                        <span class="nav-title">Saved</span>
+                        <span class="nav-subtitle">Post/Reviewer</span>
+                    </div>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <section class="dashboard-section active-section-view" id="feedSection" data-section="feed">
+                <!-- Create Post Section -->
+                <section class="create-post">
+                    <textarea id="postContent" placeholder="Share what you are studying or drop a reviewer..."></textarea>
+                    <div class="create-actions">
+                        <div class="attach-control">
+                            <input class="file-input" type="file" id="postFile" accept=".pdf,.docx,.ppt,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation">
+                            <button class="action-btn" type="button" id="attachDocumentBtn">
+                                <span>📎</span> Attach Document
+                            </button>
+                            <span class="selected-file" id="selectedFileName"></span>
+                        </div>
+                        <select class="category-select" id="postCategory" aria-label="Choose subject category">
+                            <option value="General">General</option>
+                        </select>
+                        <button class="publish-btn" type="button" id="publishPostBtn">Publish</button>
+                    </div>
+                </section>
+
+                <!-- Feed Posts -->
+                <div class="feed">
+                <!-- Post 1 -->
+                <article class="post" data-post-id="post-1">
+                    <div class="post-header">
+                        <div class="post-user">
+                            <img src="./frontend/assets/profile-picture/Matt Donovan.jpg" alt="Matt Donovan" class="post-avatar">
+                            <div class="post-user-info">
+                                <span class="post-user-name">Matt Donovan</span>
+                                <span class="post-meta">posted in <strong>Biology 101</strong> • 3h ago</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="post-content">
+                        Hello everyone! I've curated my detailed review guide for the cellular division exam tomorrow morning. Hope this maps things out clearly for you. Good luck!
+                    </p>
+                    <div class="post-attachment">
+                        <span class="attachment-icon">📄</span>
+                        <span class="attachment-name">Bio_Cell_Division_Notes.pdf</span>
+                        <span class="attachment-size">(2.4 MB)</span>
+                    </div>
+                    <div class="post-actions">
+                        <button class="action-stat">
+                            <span>👍</span> Upvote <span class="count">(100)</span>
+                        </button>
+                        <button class="action-stat">
+                            <span>💬</span> Insights <span class="count">(83)</span>
+                        </button>
+                        <button class="action-stat">
+                            <span>🔖</span> Bookmark
+                        </button>
+                    </div>
+                </article>
+
+                <!-- Post 2 -->
+                <article class="post" data-post-id="post-2">
+                    <div class="post-header">
+                        <div class="post-user">
+                            <img src="./frontend/assets/profile-picture/Pokimane.jpg" alt="Breezy Dela Cruz" class="post-avatar">
+                            <div class="post-user-info">
+                                <span class="post-user-name">Breezy Dela Cruz</span>
+                                <span class="post-meta">updated timeline • 7h ago</span>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="post-content">
+                        Just started a new study circle for Advanced Statistics. Looking for motivated members to join! We meet twice a week.
+                    </p>
+                    <div class="post-actions">
+                        <button class="action-stat">
+                            <span>👍</span> Upvote <span class="count">(45)</span>
+                        </button>
+                        <button class="action-stat">
+                            <span>💬</span> Insights <span class="count">(12)</span>
+                        </button>
+                        <button class="action-stat">
+                            <span>🔖</span> Bookmark
+                        </button>
+                    </div>
+                </article>
+                </div>
+            </section>
+
+            <section class="dashboard-section" id="inboxSection" data-section="inbox" hidden>
+                <div class="inbox-container">
+                    <!-- Conversations List (Left Column) -->
+                    <div class="conversations-panel">
+                        <div class="conversations-header">
+                            <h2>Conversations</h2>
+                        </div>
+
+                        <!-- Pending Invitations Section -->
+                        <div class="pending-invitations" id="pendingInvitations" hidden>
+                            <div class="pending-invitations-title">📬 Pending Invitations</div>
+                            <div class="pending-invitations-list" id="pendingInvitationsList"></div>
+                        </div>
+
+                        <div class="connections-manager">
+                            <div class="connections-manager-title">Connections</div>
+                            <div class="friend-search-controls">
+                                <input type="text" id="friendSearchInput" placeholder="Search name or username" autocomplete="off">
+                                <button type="button" id="friendSearchBtn">Search</button>
+                            </div>
+                            <div class="friend-search-results" id="friendSearchResults"></div>
+
+                            <div class="friend-requests-panel" id="friendRequestsPanel" hidden>
+                                <div class="friend-panel-label">Friend Requests</div>
+                                <div class="friend-request-list" id="friendRequestsList"></div>
+                            </div>
+
+                            <div class="friends-panel">
+                                <div class="friend-panel-label">Friends</div>
+                                <div class="friends-list" id="friendsList"></div>
+                            </div>
+                        </div>
+
+                        <div class="conversations-list" id="conversationsList"></div>
+                    </div>
+
+                    <!-- Message Thread (Right Column) -->
+                    <div class="thread-panel">
+                        <div class="thread-empty-state" id="threadEmptyState">
+                            <p>Select a conversation to start messaging</p>
+                        </div>
+                        <div class="thread-content" id="threadContent" hidden>
+                            <div class="thread-header">
+                                <div class="thread-group-info">
+                                    <h3 id="threadGroupName"></h3>
+                                    <div class="thread-members" id="threadMembers"></div>
+                                </div>
+                            </div>
+                            <div class="messages-list" id="messagesList"></div>
+                            <div class="message-input-area">
+                                <input type="text" id="messageInput" placeholder="Type a message or attach a document..." class="message-input">
+                                <button type="button" id="sendMessageBtn" class="send-message-btn">Send</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="dashboard-section" id="savedSection" data-section="saved" hidden>
+                <div class="saved-page">
+                    <div class="saved-header">
+                        <h2 class="saved-title">BookMarked</h2>
+                    </div>
+                    <div class="bookmarked-items" id="bookmarkedItemsList"></div>
+                    <div class="saved-empty-state" id="savedEmptyState" hidden>
+                        <p>No bookmarked items yet. Start bookmarking posts to save them for later.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Settings Section -->
+            <section class="dashboard-section" id="settingsSection" data-section="settings" hidden>
+                <div class="settings-page">
+                    <!-- Header Panel -->
+                    <div class="settings-header-panel">
+                        <div>
+                            <div class="settings-kicker">⚙️ Settings & Privacy</div>
+                            <h1>Manage Your Account</h1>
+                            <p>Control your privacy, appearance, and account preferences from one secure dashboard.</p>
+                        </div>
+                    </div>
+
+                    <!-- Settings Accordion -->
+                    <div class="settings-accordion" id="settingsAccordion">
+                        <!-- Account Settings -->
+                        <div class="settings-card active">
+                            <button class="settings-accordion-trigger" type="button" aria-expanded="true">
+                                <div class="settings-trigger-icon">🔐</div>
+                                <div class="settings-trigger-copy">
+                                    <span class="settings-trigger-title">Account Settings</span>
+                                    <span class="settings-trigger-subtitle">Email, password, and authentication</span>
+                                </div>
+                                <span class="settings-chevron">▾</span>
+                            </button>
+                            <div class="settings-accordion-panel">
+                                <div class="settings-grid">
+                                    <div class="settings-field">
+                                        <span>Email Address</span>
+                                        <input type="email" id="settingsEmail" placeholder="your.email@example.com" value="girly.reyes@studyhive.edu">
+                                    </div>
+                                    <div class="settings-field">
+                                        <span>Current Password</span>
+                                        <input type="password" id="settingsCurrentPassword" data-password-field placeholder="••••••••">
+                                    </div>
+                                    <div class="settings-field">
+                                        <span>New Password</span>
+                                        <input type="password" id="settingsNewPassword" data-password-field placeholder="••••••••">
+                                    </div>
+                                    <div class="settings-field">
+                                        <span>Confirm Password</span>
+                                        <input type="password" id="settingsConfirmPassword" data-password-field placeholder="••••••••">
+                                    </div>
+                                </div>
+                                <p class="settings-provider-message" id="settingsProviderMessage" hidden>This account is managed through Google Sign-In.</p>
+                                <div class="settings-list">
+                                    <div class="settings-row">
+                                        <div>
+                                            <span class="settings-row-title">Two-Factor Authentication</span>
+                                            <span class="settings-row-note">Add an extra layer of security to your account</span>
+                                        </div>
+                                        <button class="settings-toggle" data-toggle="2fa" aria-pressed="false" type="button">
+                                            <span class="settings-toggle-thumb"></span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Privacy Settings -->
+                        <div class="settings-card">
+                            <button class="settings-accordion-trigger" type="button" aria-expanded="false">
+                                <div class="settings-trigger-icon">🔍</div>
+                                <div class="settings-trigger-copy">
+                                    <span class="settings-trigger-title">Privacy Settings</span>
+                                    <span class="settings-trigger-subtitle">Control who can see your profile and activity</span>
+                                </div>
+                                <span class="settings-chevron">▾</span>
+                            </button>
+                            <div class="settings-accordion-panel" hidden>
+                                <div class="settings-list">
+                                    <div class="settings-row">
+                                        <div>
+                                            <span class="settings-row-title">Public / Private Profile</span>
+                                            <span class="settings-row-note">Switch between public and private profile visibility</span>
+                                        </div>
+                                        <button class="settings-toggle" data-toggle="public-profile" aria-pressed="true" type="button">
+                                            <span class="settings-toggle-thumb"></span>
+                                        </button>
+                                    </div>
+                                    <div class="settings-row">
+                                        <div>
+                                            <span class="settings-row-title">Show Online Status</span>
+                                            <span class="settings-row-note">Let others know when you're active</span>
+                                        </div>
+                                        <button class="settings-toggle" data-toggle="online-status" aria-pressed="true" type="button">
+                                            <span class="settings-toggle-thumb"></span>
+                                        </button>
+                                    </div>
+                                    <div class="settings-row">
+                                        <div>
+                                            <span class="settings-row-title">Allow Direct Messages</span>
+                                            <span class="settings-row-note">Accept messages from anyone on StudyHive</span>
+                                        </div>
+                                        <button class="settings-toggle" data-toggle="direct-messages" aria-pressed="true" type="button">
+                                            <span class="settings-toggle-thumb"></span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="blocked-users">
+                                    <h3>Blocked Users</h3>
+                                    <div class="settings-list">
+                                        <div class="blocked-user-item">
+                                            <div class="blocked-user-avatar">👤</div>
+                                            <div>
+                                                <span>@spammer_user</span>
+                                                <small>Blocked 2 weeks ago</small>
+                                            </div>
+                                            <button type="button">Unblock</button>
+                                        </div>
+                                        <div class="blocked-user-item">
+                                            <div class="blocked-user-avatar">AB</div>
+                                            <div>
+                                                <span>@anonymous_bee</span>
+                                                <small>Blocked yesterday</small>
+                                            </div>
+                                            <button type="button">Unblock</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Appearance -->
+                        <div class="settings-card">
+                            <button class="settings-accordion-trigger" type="button" aria-expanded="false">
+                                <div class="settings-trigger-icon">🎨</div>
+                                <div class="settings-trigger-copy">
+                                    <span class="settings-trigger-title">Appearance</span>
+                                    <span class="settings-trigger-subtitle">Dark mode, theme, and layout preferences</span>
+                                </div>
+                                <span class="settings-chevron">▾</span>
+                            </button>
+                            <div class="settings-accordion-panel" hidden>
+                                <div class="settings-list">
+                                    <div class="settings-row">
+                                        <div>
+                                            <span class="settings-row-title">Dark Mode</span>
+                                            <span class="settings-row-note">Use dark theme for reduced eye strain</span>
+                                        </div>
+                                        <button class="settings-toggle" id="settingsDarkModeSwitch" data-toggle="dark-mode" aria-pressed="false" type="button">
+                                            <span class="settings-toggle-thumb"></span>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="settings-grid">
+                                    <div class="settings-field">
+                                        <span>Theme Color</span>
+                                        <select id="themeColorSelect">
+                                            <option value="#f4b400">Yellow (Default)</option>
+                                            <option value="#42a5f5">Blue</option>
+                                            <option value="#66bb6a">Green</option>
+                                            <option value="#ec407a">Pink</option>
+                                            <option value="#ab47bc">Purple</option>
+                                        </select>
+                                    </div>
+                                    <div class="settings-field">
+                                        <span>Font Size</span>
+                                        <select id="fontSizeSelect">
+                                            <option value="normal">Normal</option>
+                                            <option value="compact">Compact</option>
+                                            <option value="large">Large</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Danger Zone -->
+                        <div class="settings-card danger-settings-card">
+                            <button class="settings-accordion-trigger" type="button" aria-expanded="false">
+                                <div class="settings-trigger-icon danger-trigger-icon">⚠️</div>
+                                <div class="settings-trigger-copy">
+                                    <span class="settings-trigger-title">Danger Zone</span>
+                                    <span class="settings-trigger-subtitle">Irreversible account actions</span>
+                                </div>
+                                <span class="settings-chevron">▾</span>
+                            </button>
+                            <div class="settings-accordion-panel" hidden>
+                                <div class="settings-list">
+                                    <div class="danger-zone-actions">
+                                        <div>
+                                            <span class="settings-row-title">Logout All Devices</span>
+                                            <p>Sign out from all sessions on all devices</p>
+                                        </div>
+                                        <button class="warning-action-btn" type="button" data-danger-action="logout devices">Sign Out Everywhere</button>
+                                    </div>
+                                    <div class="danger-zone-actions">
+                                        <div>
+                                            <span class="settings-row-title">Delete Account</span>
+                                            <p>Permanently delete your account and all data</p>
+                                        </div>
+                                        <button class="danger-action-btn" type="button" data-danger-action="delete account">Delete Account</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button class="settings-save-fab" id="saveSettingsBtn" type="button">
+                        <span class="settings-save-label">Save Settings</span>
+                        <span class="save-btn-spinner" aria-hidden="true"></span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Create Study Circle Modal -->
+            <div class="create-circle-modal" id="createCircleModal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="createCircleTitle">
+                <div class="modal-backdrop" data-close-circle-modal></div>
+                <div class="create-circle-dialog">
+                    <div class="create-circle-header">
+                        <h2 id="createCircleTitle">Create Study Circle</h2>
+                        <button class="create-circle-close" type="button" data-close-circle-modal="" aria-label="Close">✕</button>
+                    </div>
+
+                    <div class="create-circle-form-container">
+                        <form id="createCircleForm" class="create-circle-form">
+                            <!-- Circle Name -->
+                            <div class="form-group">
+                                <label for="circleName">Circle Name *</label>
+                                <input type="text" id="circleName" class="form-input" placeholder="e.g., Biology 101" required>
+                                <span class="form-error" id="circleNameError"></span>
+                            </div>
+
+                            <!-- Circle Description -->
+                            <div class="form-group">
+                                <label for="circleDescription">Description</label>
+                                <textarea id="circleDescription" class="form-textarea" placeholder="What's this study circle about?" maxlength="200" rows="3"></textarea>
+                                <div class="form-field-footer">
+                                    <span class="character-counter" id="descriptionCounter">0/200</span>
+                                </div>
+                            </div>
+
+                            <!-- Member Selection -->
+                            <div class="form-group">
+                                <label for="memberSearch">Invite Friends</label>
+                                <input type="text" id="memberSearch" class="form-input" placeholder="Search friends...">
+
+                                <div class="member-selection-container">
+                                    <div class="member-checkbox-list" id="memberCheckboxList"></div>
+                                </div>
+
+                                <div class="selected-members-container">
+                                    <label class="selected-members-label">Selected Invites:</label>
+                                    <div class="selected-members" id="selectedMembers"></div>
+                                </div>
+                            </div>
+
+                            <!-- Invite Link (shown after creation) -->
+                            <div class="form-group" id="inviteLinkGroup" hidden>
+                                <label for="inviteLink">Share This Link</label>
+                                <div class="invite-link-container">
+                                    <input type="text" id="inviteLink" class="form-input invite-link-input" readonly>
+                                    <button type="button" class="copy-link-btn" id="copyLinkBtn">📋 Copy</button>
+                                </div>
+                                <small class="invite-link-note">Share this link with others to invite them to your study circle</small>
+                            </div>
+
+                            <!-- Form Actions -->
+                            <div class="create-circle-actions">
+                                <button type="button" class="btn-secondary" id="cancelCircleBtn" data-close-circle-modal="">Cancel</button>
+                                <button type="submit" class="btn-primary">Create Circle</button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Success Message (shown after creation) -->
+                    <div class="create-circle-success" id="createCircleSuccess" hidden>
+                        <div class="success-icon">✓</div>
+                        <h3>Study Circle Created!</h3>
+                        <p id="successMessage"></p>
+                        <button type="button" class="btn-primary" id="doneBtn" data-close-circle-modal>Done</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Profile Section -->
+            <section class="dashboard-section" id="profileSection" data-section="profile" hidden>
+                <div class="profile-page">
+                    <div class="profile-edit-shell">
+                        <div class="profile-hero-card">
+                            <div class="profile-avatar-area">
+                                <div class="profile-avatar-frame">
+                                    <img src="./frontend/assets/profile-picture/default-profile-picture.webp" id="profileAvatarPreview" alt="Profile photo">
+                                </div>
+                                <button type="button" id="changePhotoBtn" class="change-photo-btn">Change Photo</button>
+                                <input type="file" id="avatarUpload" accept="image/*" hidden>
+                            </div>
+                            <div class="profile-heading">
+                                <span class="profile-kicker">Your Profile</span>
+                                <h1>Girly Reyes</h1>
+                                <p class="profile-heading-meta">@girlyr • BS Computer Science • 3rd Year</p>
+                            </div>
+                            <div class="profile-stats-grid">
+                                <div class="profile-stat-card">
+                                    <div class="stat-value" id="profilePostsStat">0</div>
+                                    <div class="stat-label">Posts Shared</div>
+                                </div>
+                                <div class="profile-stat-card">
+                                    <div class="stat-value" id="profileReviewersStat">0</div>
+                                    <div class="stat-label">Reviewers</div>
+                                </div>
+                                <div class="profile-stat-card">
+                                    <div class="stat-value" id="profileCirclesStat">0</div>
+                                    <div class="stat-label">Study Circles</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="profile-form-card">
+                            <h2>Edit Profile</h2>
+                            <form id="profileEditForm" class="profile-edit-form">
+                                <div class="profile-form-grid">
+                                    <div class="profile-field">
+                                        <span>Full Name</span>
+                                        <input type="text" id="profileFullName" placeholder="Enter your full name">
+                                    </div>
+                                    <div class="profile-field">
+                                        <span>Display Name</span>
+                                        <input type="text" id="profileDisplayName" placeholder="Enter your nickname">
+                                    </div>
+                                    <div class="profile-field">
+                                        <span>Username</span>
+                                        <input type="text" id="profileUsername" placeholder="@username">
+                                    </div>
+                                    <div class="profile-field profile-field-wide">
+                                        <span>Bio</span>
+                                        <textarea id="profileBio" placeholder="Tell us about yourself" rows="3"></textarea>
+                                    </div>
+                                    <div class="profile-field">
+                                        <span>School / University</span>
+                                        <input type="text" id="profileSchool" placeholder="Your school">
+                                    </div>
+                                    <div class="profile-field">
+                                        <span>Course / Major</span>
+                                        <input type="text" id="profileCourse" placeholder="Your course">
+                                    </div>
+                                    <div class="profile-field">
+                                        <span>Year Level</span>
+                                        <select id="profileYearLevel">
+                                            <option value="1st Year">1st Year</option>
+                                            <option value="2nd Year">2nd Year</option>
+                                            <option value="3rd Year" selected>3rd Year</option>
+                                            <option value="4th Year">4th Year</option>
+                                            <option value="Post Graduate">Post Graduate</option>
+                                        </select>
+                                    </div>
+                                    <div class="profile-field profile-field-wide">
+                                        <div class="skills-header">
+                                            <label>Skills & Expertise</label>
+                                        </div>
+                                        <div class="skill-input-row">
+                                            <input type="text" id="skillInput" placeholder="Add a skill">
+                                            <button type="button" id="addSkillBtn" class="add-skill-btn">+ Add</button>
+                                        </div>
+                                        <div id="skillsList" class="skills-list"></div>
+                                    </div>
+                                </div>
+                                <div class="profile-form-actions">
+                                    <button type="button" id="cancelProfileEditBtn" class="cancel-profile-btn">Cancel</button>
+                                    <button type="submit" id="saveProfileBtn" class="save-profile-btn">Save Changes</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Help & Support Section -->
+            <section class="dashboard-section help-page" id="helpSection" data-section="help" hidden>
+                <div class="help-hero">
+                    <div>
+                        <div class="help-kicker">Help & Support</div>
+                        <h1>Get Help with StudyHive</h1>
+                        <p>Browse our FAQs, watch tutorials, or contact our support team. We're here to help you get the most out of StudyHive.</p>
+                    </div>
+                </div>
+
+                <div class="help-search-wrap">
+                    <div class="help-search-bar">
+                        <span>🔍</span>
+                        <input type="text" id="helpSearchInput" placeholder="Search help topics...">
+                    </div>
+                </div>
+
+                <div class="help-layout">
+                    <div class="help-main-column">
+                        <div class="help-panel">
+                            <div class="help-panel-header">
+                                <div class="help-panel-icon">❓</div>
+                                <div>
+                                    <h2>Frequently Asked Questions</h2>
+                                    <p>Find answers to common questions</p>
+                                </div>
+                            </div>
+                            <div class="faq-list">
+                                <div class="faq-item active" data-faq-item>
+                                    <button class="faq-question" type="button" aria-expanded="true">
+                                        <span>How do I create a study circle?</span>
+                                        <span class="faq-chevron">▼</span>
+                                    </button>
+                                    <div class="faq-answer">
+                                        <p>Click the "➕ New Study Circle" button in the right sidebar. Give your circle a name, invite members, and set your collaboration preferences.</p>
+                                    </div>
+                                </div>
+                                <div class="faq-item" data-faq-item>
+                                    <button class="faq-question" type="button" aria-expanded="false">
+                                        <span>Can I share documents with my study group?</span>
+                                        <span class="faq-chevron">▼</span>
+                                    </button>
+                                    <div class="faq-answer">
+                                        <p>Yes! Use the 📎 Attach Document button when creating a post. You can share PDFs, Word documents, and PowerPoint presentations.</p>
+                                    </div>
+                                </div>
+                                <div class="faq-item" data-faq-item>
+                                    <button class="faq-question" type="button" aria-expanded="false">
+                                        <span>How do I bookmark posts for later?</span>
+                                        <span class="faq-chevron">▼</span>
+                                    </button>
+                                    <div class="faq-answer">
+                                        <p>Click the 🔖 Bookmark button on any post in your feed. All bookmarked posts will be saved to your "Saved" section.</p>
+                                    </div>
+                                </div>
+                                <div class="faq-item" data-faq-item>
+                                    <button class="faq-question" type="button" aria-expanded="false">
+                                        <span>Is my study data private?</span>
+                                        <span class="faq-chevron">▼</span>
+                                    </button>
+                                    <div class="faq-answer">
+                                        <p>Yes, your privacy is important to us. Only members of your study circles can see shared content.</p>
+                                    </div>
+                                </div>
+                                <div class="faq-item" data-faq-item>
+                                    <button class="faq-question" type="button" aria-expanded="false">
+                                        <span>How do I update my profile?</span>
+                                        <span class="faq-chevron">▼</span>
+                                    </button>
+                                    <div class="faq-answer">
+                                        <p>Navigate to your Profile section and click "Edit Profile". Update your information and save your changes.</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="faqEmptyState" class="faq-empty-state" hidden>No matching help topics found.</div>
+                        </div>
+                    </div>
+
+                    <div class="contact-support-card">
+                        <div class="help-panel-header">
+                            <div class="help-panel-icon">📧</div>
+                            <div>
+                                <h2>Contact Support</h2>
+                                <p>Send us a message</p>
+                            </div>
+                        </div>
+                        <form id="supportForm" class="support-form">
+                            <div class="support-field">
+                                <span>Subject</span>
+                                <input type="text" id="supportSubject" placeholder="How can we help?" required>
+                            </div>
+                            <div class="support-field">
+                                <span>Message</span>
+                                <textarea id="supportMessage" placeholder="Describe your issue..." rows="4" required></textarea>
+                            </div>
+                            <button type="submit" id="sendSupportBtn" class="send-support-btn">Send Message</button>
+                        </form>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Report a Problem Section -->
+            <section class="dashboard-section report-page" id="reportSection" data-section="report" hidden>
+                <div class="report-shell">
+                    <div class="report-form-panel">
+                        <div class="report-header">
+                            <span class="report-kicker">Report a Problem</span>
+                            <h1>Help Us Improve</h1>
+                            <p>Report bugs, suggest features, or let us know if you encounter any issues.</p>
+                        </div>
+
+                        <form id="reportForm" class="report-form">
+                            <div class="report-field">
+                                <span>Problem Category</span>
+                                <select id="reportCategory" required>
+                                    <option value="">Select a category...</option>
+                                    <option value="Bug">Bug Report</option>
+                                    <option value="Feature">Feature Request</option>
+                                    <option value="Performance">Performance Issue</option>
+                                    <option value="Accessibility">Accessibility Issue</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                                <span id="reportCategoryError" class="report-error"></span>
+                            </div>
+
+                            <div class="report-field">
+                                <span>Problem Title</span>
+                                <input type="text" id="reportTitle" placeholder="Brief summary of the problem" required>
+                                <span id="reportTitleError" class="report-error"></span>
+                            </div>
+
+                            <div class="report-field report-field-wide">
+                                <div class="report-field-footer">
+                                    <span>Description</span>
+                                    <span id="reportCharacterCounter" class="character-counter">0/500</span>
+                                </div>
+                                <textarea id="reportDescription" placeholder="Provide detailed information about the problem..." maxlength="500" required></textarea>
+                                <span id="reportDescriptionError" class="report-error"></span>
+                            </div>
+
+                            <div class="report-field report-field-wide">
+                                <span>Priority Level</span>
+                                <div class="priority-selector">
+                                    <label class="priority-option">
+                                        <input type="radio" name="priority" value="Low">
+                                        Low
+                                    </label>
+                                    <label class="priority-option">
+                                        <input type="radio" name="priority" value="Medium" checked>
+                                        Medium
+                                    </label>
+                                    <label class="priority-option">
+                                        <input type="radio" name="priority" value="High">
+                                        High
+                                    </label>
+                                    <label class="priority-option">
+                                        <input type="radio" name="priority" value="Critical">
+                                        Critical
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="report-field report-field-wide">
+                                <span>Screenshot (Optional)</span>
+                                <div id="screenshotDropZone" class="screenshot-drop-zone">
+                                    <div class="drop-zone-icon">📸</div>
+                                    <strong>Drag screenshot here</strong>
+                                    <small>or</small>
+                                    <button type="button" id="uploadScreenshotBtn" class="upload-screenshot-btn">Choose File</button>
+                                    <input type="file" id="reportScreenshot" accept="image/*" hidden>
+                                    <span id="screenshotFileName" class="screenshot-file-name"></span>
+                                </div>
+                            </div>
+
+                            <button type="submit" id="submitReportBtn" class="submit-report-btn">Submit Report</button>
+                        </form>
+                    </div>
+
+                    <div class="recent-reports-panel">
+                        <div class="recent-reports-header">
+                            <div class="recent-report-icon">📋</div>
+                            <div>
+                                <h2>Your Reports</h2>
+                                <p>Recent issues you've reported</p>
+                            </div>
+                        </div>
+                        <div class="recent-report-list"></div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Sidebar Right -->
+        <aside class="sidebar-right">
+            <div class="study-circles-section">
+                <h3 class="section-title">My study circles</h3>
+                <button class="new-circle-btn">➕ New Study Circle</button>
+
+                <div class="circles-list">
+                    <div class="circle-item">
+                        <div class="circle-icon">👥</div>
+                        <span class="circle-name">Understanding the self</span>
+                    </div>
+                    <div class="circle-item">
+                        <div class="circle-icon">👥</div>
+                        <span class="circle-name">Calculus</span>
+                    </div>
+                    <div class="circle-item">
+                        <div class="circle-icon">👥</div>
+                        <span class="circle-name">Biology101</span>
+                    </div>
+                </div>
+
+                <div class="active-section">
+                    <h4 class="section-subtitle">Active</h4>
+                    <div class="active-members">
+                        <p class="active-empty-state">No friends active right now.</p>
+                    </div>
+                    <button class="add-member-btn" type="button" id="addMemberBtn" hidden>Add Member</button>
+                    <button class="leave-circle-btn" type="button" id="leaveCircleBtn" hidden>Leave Circle</button>
+                    <button class="delete-circle-btn" type="button" id="deleteCircleBtn" hidden>Delete Group</button>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Shared Confirmation Modal -->
+    <div class="confirmation-modal" id="dangerConfirmModal" aria-hidden="true">
+        <div class="modal-backdrop" data-close-modal></div>
+        <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="dangerModalTitle" aria-describedby="dangerModalMessage">
+            <div class="modal-icon">⚠️</div>
+            <h2 id="dangerModalTitle">Confirm action?</h2>
+            <p id="dangerModalMessage">This action needs your confirmation before StudyHive continues.</p>
+            <div class="modal-actions">
+                <button class="modal-cancel-btn" type="button" data-close-modal>Cancel</button>
+                <button class="modal-confirm-btn" type="button" id="confirmDangerActionBtn">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast-notification" id="profileToast" role="status" aria-live="polite"></div>
+
+    <div class="search-profile-modal" id="searchProfileModal" aria-hidden="true" hidden>
+        <div class="search-profile-backdrop" data-close-search-profile></div>
+        <div class="search-profile-dialog" role="dialog" aria-modal="true" aria-labelledby="searchProfileName">
+            <button class="search-profile-close" type="button" aria-label="Close profile" data-close-search-profile>×</button>
+            <img class="search-profile-avatar" id="searchProfileAvatar" src="./frontend/assets/profile-picture/default-profile-picture.webp" alt="">
+            <div class="search-profile-copy">
+                <h2 id="searchProfileName">StudyHive User</h2>
+                <p id="searchProfileMeta">StudyHive member</p>
+                <p id="searchProfileBio"></p>
+                <div class="search-profile-actions" id="searchProfileActions">
+                    <button class="search-profile-action add" type="button" id="searchProfileAddFriendBtn">Add Friend</button>
+                    <button class="search-profile-action message-action" type="button" id="searchProfileMessageBtn">Message</button>
+                    <button class="search-profile-action unfriend" type="button" id="searchProfileUnfriendBtn">Unfriend</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="user-menu.js"></script>
+    <script src="sidebar.js"></script>
+    <script src="post-interactions.js"></script>
+    <script src="dashboard.js"></script>
+</body>
+</html>

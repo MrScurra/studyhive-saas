@@ -1,0 +1,276 @@
+/* StudyHive Login */
+/* Login/signup page layout and authentication form styles. */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: Roboto, Arial;
+  background:linear-gradient(to right, #fff0b5, #feacf6);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.container {
+  display: flex;
+  gap: 150px;
+  align-items: center;
+  max-width: 1200px;
+  width: 90%;
+  padding: 20px;
+}
+
+.left-section {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 30px;
+}
+
+.logo {
+  width: 200px;
+  height: 200px;
+  flex-shrink: 0;
+}
+
+.logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.tagline {
+  font-size: 28px;
+  font-weight: 700;
+  color: #333;
+  text-align: left;
+  flex: 1;
+}
+
+.right-section {
+  flex: 1;
+}
+
+.login-card {
+  background: #FFF9E6;
+  border-radius: 30px;
+  padding: 50px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+}
+
+.login-card h1 {
+  font-size: 32px;
+  font-weight: 700;
+  color: #000;
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+.form-group {
+  margin-bottom: 25px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 16px;
+  font-weight: 600;
+  color: #000;
+  margin-bottom: 10px;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 15px 20px;
+  border: none;
+  border-radius: 25px;
+  background: #FFE082;
+  font-size: 16px;
+  color: #333;
+  transition: all 0.3s ease;
+}
+
+.form-group input::placeholder {
+  color: #999;
+}
+
+.form-group input:focus {
+  outline: none;
+  background: #FFD54F;
+  box-shadow: 0 5px 15px rgba(255, 193, 7, 0.3);
+}
+
+.forgot-password {
+  text-align: right;
+  margin-bottom: 25px;
+}
+
+.forgot-password a {
+  font-size: 14px;
+  color: #666;
+  text-decoration: none;
+  transition: color 0.3s ease;
+}
+
+.forgot-password a:hover {
+  color: #000;
+  text-decoration: underline;
+}
+
+.login-btn {
+  width: 100%;
+  padding: 15px 30px;
+  background: #FFD54F;
+  border: none;
+  border-radius: 25px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #000;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.login-btn:hover:not(:disabled) {
+  background: #FFC947;
+  box-shadow: 0 5px 15px rgba(255, 193, 7, 0.4);
+  transform: translateY(-2px);
+}
+
+.login-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.signup-link {
+  text-align: center;
+  margin-top: 25px;
+  font-size: 15px;
+  color: #333;
+}
+
+.signup-link .link-button,
+.signup-link a {
+  color: #000;
+  font-weight: 700;
+  text-decoration: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  transition: color 0.3s ease;
+  padding: 0;
+}
+
+.signup-link .link-button:hover,
+.signup-link a:hover {
+  color: #FFD54F;
+}
+
+.hidden {
+  display: none;
+}
+
+/* OAuth button styles */
+.oauth-container {
+  margin-top: 18px;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.oauth-btn {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  height: 50px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid #dfe6ea;
+  font-weight: 600;
+  font-size: 15px;
+  color: #111;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+  gap: 10px;
+}
+
+.oauth-btn:hover:not(:disabled) {
+  background-color: #f7f9fb;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  transform: translateY(-1px);
+}
+
+.oauth-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.oauth-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.oauth-btn span {
+  display: inline-block;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.google-logo {
+  width: 20px;
+  height: 20px;
+  display: inline-block;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.error-message {
+  background-color: #fee;
+  color: #c00;
+  padding: 12px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  border-left: 4px solid #c00;
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 768px) {
+  .container {
+    flex-direction: column;
+    gap: 40px;
+  }
+
+  .logo {
+    width: 150px;
+    height: 150px;
+  }
+
+  .tagline {
+    font-size: 24px;
+  }
+
+  .oauth-btn {
+    max-width: 100%;
+  }
+}
