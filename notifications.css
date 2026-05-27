@@ -195,13 +195,18 @@
 }
 
 .notification-type-badge {
-    display: inline-block;
+    display: inline-flex;
+    flex: 0 0 auto;
+    width: fit-content;
+    max-width: max-content;
     font-size: 11px;
     padding: 2px 8px;
     border-radius: 12px;
     background-color: #f0f0f0;
     color: var(--text-dark);
     font-weight: 500;
+    line-height: 1.2;
+    white-space: nowrap;
 }
 
 .notification-type-badge.comment {

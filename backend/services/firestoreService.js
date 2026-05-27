@@ -1253,6 +1253,32 @@ const getStudyCircles = async () => {
   });
 };
 
+const getStudyCirclesForUser = async (userId) => {
+  const firestore = getFirestore();
+  const id = cleanUserId(userId);
+
+  if (!id || id === 'default-user') {
+    return getStudyCircles();
+  }
+
+  const snapshot = await firestore
+    .collection('studyCircles')
+    .where('memberIds', 'array-contains', id)
+    .get();
+  const circles = [];
+
+  snapshot.forEach((doc) => {
+    circles.push({
+      id: doc.id,
+      ...doc.data()
+    });
+  });
+
+  return circles.sort((a, b) => {
+    return getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt);
+  });
+};
+
 const updateStudyCircleInviteNotifications = async (inviteId, status) => {
   const firestore = getFirestore();
   const snapshot = await firestore
@@ -2310,6 +2336,7 @@ module.exports = {
   saveStudyCircle,
   getStudyCircle,
   getStudyCircles,
+  getStudyCirclesForUser,
   createStudyCircleInvites,
   leaveStudyCircle,
   deleteStudyCircle,

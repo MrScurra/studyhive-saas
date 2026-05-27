@@ -8,8 +8,9 @@ const DEFAULT_CATEGORY_OPTIONS = [
 const DEFAULT_CIRCLE_AVATAR = '👥';
 const DEFAULT_PROFILE_AVATAR = './frontend/assets/profile-picture/default-profile-picture.webp';
 const ACTIVE_FRIEND_WINDOW_MS = 5 * 60 * 1000;
-const PRESENCE_HEARTBEAT_MS = 60 * 1000;
 const ACTIVE_FRIEND_REFRESH_MS = 60 * 1000;
+const ENABLE_PRESENCE = false;
+const FRIENDS_CACHE_MS = 30 * 1000;
 
 let firebaseAuth = null;
 let firebaseOnAuthStateChanged = null;
@@ -26,6 +27,7 @@ let firebaseLimit = null;
 let firebaseOnSnapshot = null;
 let firebaseDoc = null;
 let firebaseSetDoc = null;
+let authGatekeeperUnsubscribe = null;
 
 const currentUser = {
     name: 'Girly R.',
@@ -197,7 +199,17 @@ async function initAuthGatekeeper() {
     }
 
     return new Promise((resolve) => {
-        firebaseOnAuthStateChanged(firebaseAuth, (user) => {
+        if (typeof authGatekeeperUnsubscribe === 'function') {
+            authGatekeeperUnsubscribe();
+            authGatekeeperUnsubscribe = null;
+        }
+
+        authGatekeeperUnsubscribe = firebaseOnAuthStateChanged(firebaseAuth, (user) => {
+            if (typeof authGatekeeperUnsubscribe === 'function') {
+                authGatekeeperUnsubscribe();
+                authGatekeeperUnsubscribe = null;
+            }
+
             if (!user) {
                 console.log('No user detected, redirecting to login...');
                 window.location.href = 'Login.html';
@@ -234,11 +246,13 @@ let loadedPosts = [];
 let userPresenceById = new Map();
 let activeFriendsFromPresence = [];
 let activeFriendsPresenceLoadedAt = 0;
-let presenceHeartbeatTimer = null;
-let presenceLifecycleEventsBound = false;
 let friendRequests = { incoming: [], outgoing: [] };
 let friendDataLoaded = false;
 let friendSearchTimer = null;
+let friendsLoadedAt = 0;
+let friendsLoadPromise = null;
+let activeFriendSearchController = null;
+let lastFriendSearchQuery = '';
 let activeSearchProfileUser = null;
 let avatarPreviewObjectUrl = '';
 
@@ -530,7 +544,9 @@ function addCircle(name, description, memberIds) {
 // Fetch study circles from backend
 async function fetchStudyCirclesFromBackend() {
     try {
-        const response = await fetch(`${API_BASE_URL}/circles`);
+        const response = await fetch(`${API_BASE_URL}/circles`, {
+            headers: getAuthHeaders()
+        });
 
         if (!response.ok) {
             throw new Error(`GET /circles failed with ${response.status}`);
@@ -1024,7 +1040,15 @@ function createPostAttachmentMarkup(post) {
     return wrapper.outerHTML;
 }
 
-function createPostActions({ upvotes = 0, comments = 0, baseUpvotes = upvotes, isOwner = false, postId = '' } = {}) {
+function createPostActions({
+    upvotes = 0,
+    comments = 0,
+    baseUpvotes = upvotes,
+    upvoted = false,
+    bookmarked = false,
+    isOwner = false,
+    postId = ''
+} = {}) {
     const actions = document.createElement('div');
     actions.className = 'post-actions';
 
@@ -1032,7 +1056,12 @@ function createPostActions({ upvotes = 0, comments = 0, baseUpvotes = upvotes, i
     upvote.className = 'action-stat';
     upvote.type = 'button';
     upvote.dataset.baseCount = String(baseUpvotes);
+    upvote.dataset.statusLoaded = 'true';
+    upvote.dataset.upvoted = String(Boolean(upvoted));
     upvote.innerHTML = `<span>👍</span> Upvote <span class="count">(${upvotes})</span>`;
+    upvote.classList.toggle('active', Boolean(upvoted));
+    upvote.setAttribute('aria-pressed', String(Boolean(upvoted)));
+    upvote.style.color = upvoted ? 'var(--primary-yellow)' : 'inherit';
 
     const insights = document.createElement('button');
     insights.className = 'action-stat';
@@ -1042,7 +1071,11 @@ function createPostActions({ upvotes = 0, comments = 0, baseUpvotes = upvotes, i
     const bookmark = document.createElement('button');
     bookmark.className = 'action-stat';
     bookmark.type = 'button';
+    bookmark.dataset.statusLoaded = 'true';
+    bookmark.dataset.bookmarked = String(Boolean(bookmarked));
     bookmark.innerHTML = '<span>🔖</span> Bookmark';
+    bookmark.classList.toggle('active', Boolean(bookmarked));
+    bookmark.style.color = bookmarked ? 'var(--primary-yellow)' : 'inherit';
 
     actions.append(upvote, insights, bookmark);
 
@@ -1080,6 +1113,8 @@ function createPostCard(post) {
         upvotes = 0,
         comments = 0,
         baseUpvotes = upvotes,
+        upvoted = false,
+        bookmarked = false,
         isOwner = false
     } = post;
     const ownerId = String(post.userId || post.ownerId || post.createdById || '');
@@ -1120,7 +1155,15 @@ function createPostCard(post) {
         article.append(attachment);
     }
 
-    article.append(createPostActions({ upvotes, comments, baseUpvotes, isOwner, postId: article.dataset.postId }));
+    article.append(createPostActions({
+        upvotes,
+        comments,
+        baseUpvotes,
+        upvoted,
+        bookmarked,
+        isOwner,
+        postId: article.dataset.postId
+    }));
     return article;
 }
 
@@ -1421,7 +1464,6 @@ function renderPosts(posts) {
     loadedPosts.forEach((post) => {
         feed.appendChild(createPostCard(post));
     });
-    applyRealtimePostCounters();
     refreshPostInteractions();
     updateProfileStats();
 }
@@ -1505,7 +1547,6 @@ async function publishPost() {
         ].filter(Boolean);
         updateProfileStats();
         feed.prepend(createPostCard(data.post));
-        applyRealtimePostCounters();
         refreshPostInteractions();
         resetPostForm();
         showToast('Post published successfully');
@@ -1955,7 +1996,9 @@ function applyUserSettings(settings = {}) {
         StudyHive.setDarkMode(settings.toggles['dark-mode'], true);
     }
 
-    syncPresenceState(true);
+    if (ENABLE_PRESENCE) {
+        syncPresenceState(true);
+    }
 }
 
 function isCurrentUserOnlineVisible() {
@@ -1963,6 +2006,8 @@ function isCurrentUserOnlineVisible() {
 }
 
 async function updateCurrentUserPresence(isActive = true) {
+    if (!ENABLE_PRESENCE) return;
+
     const userId = getCurrentUserId();
     if (!userId || userId === 'default-user') return;
 
@@ -2013,6 +2058,14 @@ async function updateCurrentUserPresence(isActive = true) {
 }
 
 async function loadActiveFriendsPresence({ force = false } = {}) {
+    if (!ENABLE_PRESENCE) {
+        activeFriendsFromPresence = [];
+        userPresenceById = new Map();
+        activeFriendsPresenceLoadedAt = Date.now();
+        renderActiveFriendsList();
+        return;
+    }
+
     if (!force && activeFriendsPresenceLoadedAt && Date.now() - activeFriendsPresenceLoadedAt < ACTIVE_FRIEND_REFRESH_MS) {
         renderActiveFriendsList();
         return;
@@ -2052,6 +2105,13 @@ async function loadActiveFriendsPresence({ force = false } = {}) {
 }
 
 async function syncPresenceState(isActive = true) {
+    if (!ENABLE_PRESENCE) {
+        activeFriendsFromPresence = [];
+        userPresenceById = new Map();
+        renderActiveFriendsList();
+        return;
+    }
+
     await updateCurrentUserPresence(isActive);
 
     if (isActive) {
@@ -2061,25 +2121,6 @@ async function syncPresenceState(isActive = true) {
         userPresenceById = new Map();
         renderActiveFriendsList();
     }
-}
-
-function bindPresenceLifecycleEvents() {
-    if (presenceLifecycleEventsBound) return;
-    presenceLifecycleEventsBound = true;
-
-    document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState !== 'hidden') {
-            syncPresenceState(true);
-        }
-    });
-
-    window.addEventListener('pagehide', () => {
-        updateCurrentUserPresence(false);
-    });
-
-    window.addEventListener('beforeunload', () => {
-        updateCurrentUserPresence(false);
-    });
 }
 
 async function loadUserSettingsFromBackend() {
@@ -2915,22 +2956,16 @@ function renderFriendsList() {
     });
 }
 
-async function loadFriends() {
-    try {
-        const response = await fetch(`${API_BASE_URL}/friends`, {
-            headers: getAuthHeaders()
-        });
+async function loadFriends({ force = false } = {}) {
+    if (friendsLoadPromise) {
+        return friendsLoadPromise;
+    }
 
-        if (!response.ok) {
-            throw new Error('Could not load friends');
-        }
+    const hasFreshFriends = friendDataLoaded
+        && friendsLoadedAt
+        && Date.now() - friendsLoadedAt < FRIENDS_CACHE_MS;
 
-        const data = await response.json();
-        acceptedFriends = Array.isArray(data.friends) ? data.friends : [];
-        friendRequests = data.requests || { incoming: [], outgoing: [] };
-        friendDataLoaded = true;
-
-        syncFriendConversations();
+    if (!force && hasFreshFriends) {
         renderFriendRequests();
         renderFriendsList();
         renderActiveFriendsList();
@@ -2938,27 +2973,83 @@ async function loadFriends() {
         renderMessageThread();
         renderMemberCheckboxes(document.getElementById('memberSearch')?.value || '');
         updateProfileStats();
-        loadActiveFriendsPresence();
-    } catch (error) {
-        console.error('Failed to load friends:', error);
+        return acceptedFriends;
     }
+
+    friendsLoadPromise = (async () => {
+        try {
+            const response = await fetch(`${API_BASE_URL}/friends`, {
+                headers: getAuthHeaders()
+            });
+
+            if (!response.ok) {
+                throw new Error('Could not load friends');
+            }
+
+            const data = await response.json();
+            acceptedFriends = Array.isArray(data.friends) ? data.friends : [];
+            friendRequests = data.requests || { incoming: [], outgoing: [] };
+            friendDataLoaded = true;
+            friendsLoadedAt = Date.now();
+
+            syncFriendConversations();
+            renderFriendRequests();
+            renderFriendsList();
+            renderActiveFriendsList();
+            renderConversationList();
+            renderMessageThread();
+            renderMemberCheckboxes(document.getElementById('memberSearch')?.value || '');
+            updateProfileStats();
+
+            if (ENABLE_PRESENCE) {
+                loadActiveFriendsPresence();
+            }
+
+            return acceptedFriends;
+        } catch (error) {
+            console.error('Failed to load friends:', error);
+            return acceptedFriends;
+        } finally {
+            friendsLoadPromise = null;
+        }
+    })();
+
+    return friendsLoadPromise;
 }
 
-async function searchFriends() {
+async function searchFriends({ force = false } = {}) {
     const query = friendSearchInput?.value.trim() || '';
     if (!friendSearchResults) return;
 
     if (query.length < 2) {
+        if (activeFriendSearchController) {
+            activeFriendSearchController.abort();
+            activeFriendSearchController = null;
+        }
         friendSearchResults.innerHTML = '';
+        lastFriendSearchQuery = '';
         return;
     }
+
+    if (!force && query === lastFriendSearchQuery && friendSearchResults.children.length > 0) {
+        return;
+    }
+
+    if (activeFriendSearchController) {
+        activeFriendSearchController.abort();
+    }
+
+    activeFriendSearchController = new AbortController();
+    const friendSearchController = activeFriendSearchController;
+    lastFriendSearchQuery = query;
 
     friendSearchResults.innerHTML = '';
     friendSearchResults.appendChild(createTextElement('p', 'friend-empty-state', 'Searching...'));
 
     try {
         const response = await fetch(`${API_BASE_URL}/friends/search?q=${encodeURIComponent(query)}`, {
-            headers: getAuthHeaders()
+            headers: getAuthHeaders(),
+            signal: friendSearchController.signal
         });
 
         if (!response.ok) {
@@ -2968,9 +3059,15 @@ async function searchFriends() {
         const data = await response.json();
         renderFriendSearchResults(data.users || []);
     } catch (error) {
+        if (error.name === 'AbortError') return;
+
         console.error('Friend search failed:', error);
         friendSearchResults.innerHTML = '';
         friendSearchResults.appendChild(createTextElement('p', 'friend-empty-state', 'Friend search is unavailable right now.'));
+    } finally {
+        if (activeFriendSearchController === friendSearchController) {
+            activeFriendSearchController = null;
+        }
     }
 }
 
@@ -2991,8 +3088,8 @@ async function sendFriendRequest(toUserId) {
         }
 
         showToast('Friend request sent');
-        await loadFriends();
-        await searchFriends();
+        await loadFriends({ force: true });
+        await searchFriends({ force: true });
         updateSearchProfileActions();
     } catch (error) {
         console.error('Friend request failed:', error);
@@ -3015,8 +3112,8 @@ async function acceptFriendRequest(requestId) {
         }
 
         showToast('Friend request accepted');
-        await loadFriends();
-        await searchFriends();
+        await loadFriends({ force: true });
+        await searchFriends({ force: true });
         updateSearchProfileActions();
     } catch (error) {
         console.error('Accept friend request failed:', error);
@@ -3044,9 +3141,9 @@ async function acceptFriendRequestFromNotification(notificationId, requestId, it
         finishFriendRequestNotificationAction(itemElement);
         await updateNotificationBadge();
         showToast('Friend request accepted');
-        await loadFriends();
+        await loadFriends({ force: true });
         await loadNotifications();
-        await searchFriends();
+        await searchFriends({ force: true });
         updateSearchProfileActions();
     } catch (error) {
         console.error('Accept friend request failed:', error);
@@ -3070,8 +3167,8 @@ async function declineFriendRequest(requestId) {
         }
 
         showToast('Friend request declined');
-        await loadFriends();
-        await searchFriends();
+        await loadFriends({ force: true });
+        await searchFriends({ force: true });
         updateSearchProfileActions();
     } catch (error) {
         console.error('Decline friend request failed:', error);
@@ -3099,9 +3196,9 @@ async function declineFriendRequestFromNotification(notificationId, requestId, i
         finishFriendRequestNotificationAction(itemElement);
         await updateNotificationBadge();
         showToast('Friend request declined');
-        await loadFriends();
+        await loadFriends({ force: true });
         await loadNotifications();
-        await searchFriends();
+        await searchFriends({ force: true });
         updateSearchProfileActions();
     } catch (error) {
         console.error('Decline friend request failed:', error);
@@ -3182,8 +3279,8 @@ async function unfriendUser(friendUserId) {
         }
 
         showToast('Friend removed');
-        await loadFriends();
-        await searchFriends();
+        await loadFriends({ force: true });
+        await searchFriends({ force: true });
         updateSearchProfileActions();
     } catch (error) {
         console.error('Unfriend failed:', error);
@@ -3362,6 +3459,10 @@ function updateConversationMessagesFromList(messages) {
 }
 
 async function loadAllMessagesFromBackend() {
+    if (isRealtimeListenerActive('messages')) {
+        return;
+    }
+
     try {
         const response = await fetch(`${API_BASE_URL}/messages`, {
             headers: getAuthHeaders()
@@ -3507,6 +3608,11 @@ function renderMessageThread() {
 async function selectConversation(conversationId) {
     selectedConversationId = String(conversationId);
     renderConversationList();
+
+    if (isRealtimeListenerActive('messages') && realtimeMessagesLoaded) {
+        renderMessageThread();
+        return;
+    }
     
     try {
         const response = await fetch(`${API_BASE_URL}/messages?conversationId=${encodeURIComponent(selectedConversationId)}`, {
@@ -3572,10 +3678,21 @@ async function handleSendMessage() {
 }
 
 function initInboxSection() {
+    const inboxSection = document.getElementById('inboxSection');
+
+    if (inboxSection?.dataset.ready === 'true') {
+        loadFriends();
+        return;
+    }
+
+    if (inboxSection) {
+        inboxSection.dataset.ready = 'true';
+    }
+
     initFriendsPanel();
     renderConversationList();
     renderPendingInvitations();
-    loadFriends().then(loadAllMessagesFromBackend);
+    loadFriends();
 
     const sendMessageBtn = document.getElementById('sendMessageBtn');
     const messageInput = document.getElementById('messageInput');
@@ -3594,12 +3711,11 @@ function initInboxSection() {
     }
 
     // Re-render invitations when inbox section is viewed
-    const inboxSection = document.getElementById('inboxSection');
     if (inboxSection) {
         const observer = new MutationObserver(() => {
             if (!inboxSection.hidden) {
                 renderPendingInvitations();
-                loadFriends().then(loadAllMessagesFromBackend);
+                loadFriends();
             }
         });
         observer.observe(inboxSection, { attributes: true });
@@ -3773,7 +3889,6 @@ function openCreateCircleModal({ mode = 'create', circle = null, returnFocus = n
     const modal = document.getElementById('createCircleModal');
     const form = document.getElementById('createCircleForm');
     const formContainer = document.querySelector('.create-circle-form-container');
-    const successSection = document.getElementById('createCircleSuccess');
     const memberSearch = document.getElementById('memberSearch');
 
     circleModalReturnFocus = returnFocus;
@@ -3791,7 +3906,6 @@ function openCreateCircleModal({ mode = 'create', circle = null, returnFocus = n
     renderMemberCheckboxes();
 
     formContainer.hidden = false;
-    if (successSection) successSection.hidden = true;
 
     modal.classList.add('active');
     modal.setAttribute('aria-hidden', 'false');
@@ -3807,7 +3921,6 @@ function closeCreateCircleModal({ resetToForm = false } = {}) {
     const newCircleBtn = document.querySelector('.new-circle-btn');
     const form = document.getElementById('createCircleForm');
     const formContainer = document.querySelector('.create-circle-form-container');
-    const successSection = document.getElementById('createCircleSuccess');
 
     if (modal.contains(document.activeElement)) {
         document.activeElement.blur();
@@ -3818,7 +3931,6 @@ function closeCreateCircleModal({ resetToForm = false } = {}) {
 
     if (resetToForm) {
         form?.reset();
-        if (successSection) successSection.hidden = true;
         if (formContainer) formContainer.hidden = false;
         selectedCircleMembers = [];
         setCircleModalMode('create');
@@ -3984,7 +4096,7 @@ async function handleCreateCircle() {
     const circle = backendCircle;
     syncStudyCircleViews([...studyCircles, backendCircle], { persist: true });
 
-    // Show success state
+    // Close the modal and show the existing toast instead of an inline success panel.
     showCircleCreatedSuccess(circle);
 
     // Update sidebar
@@ -4000,10 +4112,6 @@ async function handleCreateCircle() {
 }
 
 function showCircleInvitesSentSuccess(circle, invitations = []) {
-    const successSection = document.getElementById('createCircleSuccess');
-    const formContainer = document.querySelector('.create-circle-form-container');
-    const successMessage = document.getElementById('successMessage');
-    const successHeading = successSection?.querySelector('h3');
     const inviteLinkGroup = document.getElementById('inviteLinkGroup');
     const pendingInvites = invitations.filter(invitation =>
         String(invitation.status || 'pending').toLowerCase() === 'pending' && !invitation.alreadyExists
@@ -4020,11 +4128,8 @@ function showCircleInvitesSentSuccess(circle, invitations = []) {
         message = 'Those friends are already members of this study circle.';
     }
 
-    if (formContainer) formContainer.hidden = true;
-    if (successSection) successSection.hidden = false;
-    if (successHeading) successHeading.textContent = 'Invitations Sent!';
-    if (successMessage) successMessage.textContent = message;
     if (inviteLinkGroup) inviteLinkGroup.hidden = true;
+    closeCreateCircleModal({ resetToForm: true });
     showToast(message);
 }
 
@@ -4069,20 +4174,13 @@ async function handleInviteCircleMembers() {
 }
 
 function showCircleCreatedSuccess(circle) {
-    const successSection = document.getElementById('createCircleSuccess');
-    const formContainer = document.querySelector('.create-circle-form-container');
-    const successMessage = document.getElementById('successMessage');
-    const successHeading = successSection?.querySelector('h3');
     const inviteLinkGroup = document.getElementById('inviteLinkGroup');
     const inviteMessage = selectedCircleMembers.length > 0
         ? `${selectedCircleMembers.length} friend${selectedCircleMembers.length !== 1 ? 's' : ''} invited`
         : 'You can invite friends later.';
 
-    if (formContainer) formContainer.hidden = true;
-    if (successSection) successSection.hidden = false;
-    if (successHeading) successHeading.textContent = 'Study Circle Created!';
-    if (successMessage) successMessage.textContent = inviteMessage;
     if (inviteLinkGroup) inviteLinkGroup.hidden = true;
+    closeCreateCircleModal({ resetToForm: true });
     showToast(`Study circle "${circle.name}" created successfully! ${inviteMessage}`);
 }
 
@@ -4291,13 +4389,6 @@ function removeStudyCircleFromState(circleId) {
     syncStudyCircleViews(nextCircles, { persist: true });
 }
 
-function restartRealtimeListeners() {
-    if (!getCurrentUserId() || !isRealtimeReady()) return;
-
-    stopRealtimeListeners();
-    startRealtimeListeners();
-}
-
 async function confirmDeleteStudyCircle() {
     const circle = pendingDeleteCircle;
     if (!circle) return;
@@ -4323,7 +4414,6 @@ async function confirmDeleteStudyCircle() {
         clearSelectedCircleForMemberDisplay();
         await fetchStudyCirclesFromBackend();
         renderMemberCheckboxes(document.getElementById('memberSearch')?.value || '');
-        restartRealtimeListeners();
         closeDangerModal();
         showToast(`Deleted ${circle.name}`);
     } catch (error) {
@@ -4362,7 +4452,6 @@ async function confirmLeaveStudyCircle() {
         clearSelectedCircleForMemberDisplay();
         await fetchStudyCirclesFromBackend();
         renderMemberCheckboxes(document.getElementById('memberSearch')?.value || '');
-        restartRealtimeListeners();
         closeDangerModal();
         showToast(`Left ${circle.name}`);
     } catch (error) {
@@ -4412,9 +4501,12 @@ function updateInboxWithPendingInvitations() {
 // GLOBAL SEARCH
 // ========================================
 
-const SEARCH_DEBOUNCE_MS = 300;
+const SEARCH_DEBOUNCE_MS = 600;
+const SEARCH_MIN_CHARS = 2;
 let searchDebounceTimer = null;
 let activeSearchController = null;
+let lastGlobalSearchQuery = '';
+let lastGlobalSearchCompleted = false;
 let searchHighlightTimer = null;
 
 function setSearchDropdownOpen(isOpen) {
@@ -4748,10 +4840,21 @@ function handleSearchResultClick(result) {
 async function runGlobalSearch(query) {
     const searchQuery = String(query || '').trim();
 
-    if (!searchQuery) {
+    if (searchQuery.length < SEARCH_MIN_CHARS) {
+        if (activeSearchController) {
+            activeSearchController.abort();
+            activeSearchController = null;
+        }
         clearSearchResults();
         setSearchStatus('');
         closeSearchDropdown();
+        lastGlobalSearchQuery = '';
+        lastGlobalSearchCompleted = false;
+        return;
+    }
+
+    if (searchQuery === lastGlobalSearchQuery && lastGlobalSearchCompleted) {
+        setSearchDropdownOpen(true);
         return;
     }
 
@@ -4760,6 +4863,9 @@ async function runGlobalSearch(query) {
     }
 
     activeSearchController = new AbortController();
+    const searchController = activeSearchController;
+    lastGlobalSearchQuery = searchQuery;
+    lastGlobalSearchCompleted = false;
     setSearchDropdownOpen(true);
     clearSearchResults();
     setSearchStatus('Searching...', { loading: true });
@@ -4767,7 +4873,7 @@ async function runGlobalSearch(query) {
     try {
         const response = await fetch(`${API_BASE_URL}/search/all?q=${encodeURIComponent(searchQuery)}`, {
             headers: getAuthHeaders(),
-            signal: activeSearchController.signal
+            signal: searchController.signal
         });
 
         if (!response.ok) {
@@ -4781,12 +4887,17 @@ async function runGlobalSearch(query) {
         }
 
         renderSearchResults(results, searchQuery);
+        lastGlobalSearchCompleted = true;
     } catch (error) {
         if (error.name === 'AbortError') return;
 
         console.error('Search failed:', error);
         clearSearchResults();
         setSearchStatus('Search is unavailable right now.');
+    } finally {
+        if (activeSearchController === searchController) {
+            activeSearchController = null;
+        }
     }
 }
 
@@ -4800,7 +4911,9 @@ function queueGlobalSearch() {
 
 function initGlobalSearch() {
     if (!globalSearch || !globalSearchInput || !globalSearchButton || !globalSearchResults) return;
+    if (globalSearch.dataset.ready === 'true') return;
 
+    globalSearch.dataset.ready = 'true';
     closeSearchDropdown();
 
     globalSearchInput.addEventListener('input', queueGlobalSearch);
@@ -4858,27 +4971,81 @@ function initSearchProfileModal() {
 // ========================================
 
 const realtimeUnsubscribers = {
-    session: null,
-    presence: null,
     notifications: null,
-    studyCircles: null,
     incomingFriendRequests: null,
     outgoingFriendRequests: null,
-    friendships: null,
-    messages: null,
-    postUpvotes: null,
-    postComments: null
+    messages: null
 };
+const realtimeListenerOwners = {};
 let realtimeUserId = null;
+let realtimeLifecycleEventsBound = false;
 let realtimeFriendRefreshTimer = null;
 let realtimeMessagesCache = [];
-let realtimeUpvoteItems = [];
-let realtimeUpvoteCountsByPost = new Map();
-let realtimeCommentCountsByPost = new Map();
-let realtimeUpvoteCountsReady = false;
-let realtimeCommentCountsReady = false;
-let sessionInvalidationInProgress = false;
+let realtimeMessagesLoaded = false;
+let realtimeNotificationsLoaded = false;
 const MUTED_NOTIFICATION_TYPES = new Set(['upvote', 'bookmark']);
+
+function getActiveRealtimeListenerKeys() {
+    return Object.entries(realtimeUnsubscribers)
+        .filter(([, unsubscribe]) => typeof unsubscribe === 'function')
+        .map(([key]) => key);
+}
+
+function logActiveRealtimeListenerCount(action, key = '') {
+    const activeKeys = getActiveRealtimeListenerKeys();
+    console.log('[firestore:listeners]', {
+        action,
+        key,
+        activeCount: activeKeys.length,
+        activeKeys
+    });
+}
+
+function isRealtimeListenerActive(key) {
+    return typeof realtimeUnsubscribers[key] === 'function';
+}
+
+function hasRealtimeListenerForUser(key, userId) {
+    return isRealtimeListenerActive(key) && realtimeListenerOwners[key] === userId;
+}
+
+function registerRealtimeListener(key, userId, unsubscribe) {
+    if (typeof unsubscribe !== 'function') return false;
+
+    if (hasRealtimeListenerForUser(key, userId)) {
+        unsubscribe();
+        logActiveRealtimeListenerCount('duplicate-skipped', key);
+        return false;
+    }
+
+    if (isRealtimeListenerActive(key)) {
+        realtimeUnsubscribers[key]();
+    }
+
+    realtimeUnsubscribers[key] = unsubscribe;
+    realtimeListenerOwners[key] = userId;
+    logActiveRealtimeListenerCount('started', key);
+    return true;
+}
+
+function unsubscribeRealtimeListener(key) {
+    const hadListener = typeof realtimeUnsubscribers[key] === 'function';
+
+    if (hadListener) {
+        try {
+            realtimeUnsubscribers[key]();
+        } catch (error) {
+            console.warn(`Could not unsubscribe realtime listener "${key}":`, error);
+        }
+    }
+
+    realtimeUnsubscribers[key] = null;
+    delete realtimeListenerOwners[key];
+
+    if (hadListener) {
+        logActiveRealtimeListenerCount('stopped', key);
+    }
+}
 
 function isRealtimeReady() {
     return Boolean(
@@ -4905,27 +5072,6 @@ function getTimestampValueMillis(value) {
     return Number.isNaN(parsed) ? 0 : parsed;
 }
 
-async function getCurrentAuthTimeMillis() {
-    try {
-        const tokenResult = await firebaseAuth?.currentUser?.getIdTokenResult(false);
-        const authTime = tokenResult?.authTime;
-        const authTimeMillis = getTimestampValueMillis(authTime);
-
-        if (authTimeMillis) {
-            return authTimeMillis;
-        }
-
-        const claimAuthTime = Number(tokenResult?.claims?.auth_time || 0);
-        if (claimAuthTime) {
-            return claimAuthTime * 1000;
-        }
-    } catch (error) {
-        console.warn('Could not read Firebase auth time for session validation:', error);
-    }
-
-    return Number(localStorage.getItem('studyhive-session-started-at') || Date.now());
-}
-
 function setNotificationBadgeCount(count) {
     if (!notificationBadge) return;
 
@@ -4939,10 +5085,7 @@ function setNotificationBadgeCount(count) {
 
 function stopRealtimeListeners() {
     Object.keys(realtimeUnsubscribers).forEach((key) => {
-        if (typeof realtimeUnsubscribers[key] === 'function') {
-            realtimeUnsubscribers[key]();
-        }
-        realtimeUnsubscribers[key] = null;
+        unsubscribeRealtimeListener(key);
     });
 
     if (realtimeFriendRefreshTimer) {
@@ -4950,21 +5093,25 @@ function stopRealtimeListeners() {
         realtimeFriendRefreshTimer = null;
     }
 
-    if (presenceHeartbeatTimer) {
-        clearInterval(presenceHeartbeatTimer);
-        presenceHeartbeatTimer = null;
-    }
-
     realtimeUserId = null;
     userPresenceById = new Map();
     activeFriendsFromPresence = [];
     realtimeMessagesCache = [];
-    realtimeUpvoteItems = [];
-    realtimeUpvoteCountsByPost = new Map();
-    realtimeCommentCountsByPost = new Map();
-    realtimeUpvoteCountsReady = false;
-    realtimeCommentCountsReady = false;
-    sessionInvalidationInProgress = false;
+    realtimeMessagesLoaded = false;
+    realtimeNotificationsLoaded = false;
+}
+
+function bindRealtimeLifecycleEvents() {
+    if (realtimeLifecycleEventsBound) return;
+    realtimeLifecycleEventsBound = true;
+
+    window.addEventListener('pagehide', stopRealtimeListeners);
+    window.addEventListener('beforeunload', stopRealtimeListeners);
+    window.addEventListener('pageshow', () => {
+        if (getCurrentUserId() && isRealtimeReady()) {
+            startRealtimeListeners();
+        }
+    });
 }
 
 function getSnapshotItems(snapshot) {
@@ -4978,135 +5125,9 @@ function shouldDisplayNotification(notification = {}) {
     return !MUTED_NOTIFICATION_TYPES.has(String(notification.type || '').toLowerCase());
 }
 
-function startSessionInvalidationListener(userId) {
-    realtimeUnsubscribers.session = firebaseOnSnapshot(
-        firebaseDoc(firebaseDb, 'userSessions', userId),
-        async (snapshot) => {
-            if (!snapshot.exists() || sessionInvalidationInProgress) return;
-
-            const sessionData = snapshot.data() || {};
-            const signOutAtMillis = getTimestampValueMillis(sessionData.signOutEverywhereAt)
-                || getTimestampValueMillis(sessionData.accountDeletedAt)
-                || Number(sessionData.revokedAtMillis || 0);
-
-            if (!signOutAtMillis && !sessionData.deleted) return;
-
-            const authTimeMillis = await getCurrentAuthTimeMillis();
-            const shouldForceLogout = Boolean(sessionData.deleted)
-                || (signOutAtMillis && authTimeMillis && signOutAtMillis >= authTimeMillis);
-
-            if (!shouldForceLogout) return;
-
-            sessionInvalidationInProgress = true;
-            showToast(sessionData.deleted ? 'Account deleted. Signing out...' : 'Session ended. Signing out...');
-            await signOutFirebaseAndRedirect();
-        },
-        (error) => console.error('Realtime session invalidation failed; Firebase token revocation remains active:', error)
-    );
-}
-
-function startPresenceRealtimeListener(userId) {
-    bindPresenceLifecycleEvents();
-    syncPresenceState(true);
-
-    presenceHeartbeatTimer = setInterval(() => {
-        syncPresenceState(true);
-    }, PRESENCE_HEARTBEAT_MS);
-}
-
-function getPostActionButton(postElement, label) {
-    return Array.from(postElement.querySelectorAll('.post-actions .action-stat'))
-        .find((button) => button.textContent.includes(label));
-}
-
-function escapeCssValue(value) {
-    if (window.CSS && typeof window.CSS.escape === 'function') {
-        return window.CSS.escape(String(value));
-    }
-
-    return String(value).replace(/["\\]/g, '\\$&');
-}
-
-function setPostActionCount(button, count) {
-    if (!button) return;
-
-    const safeCount = Math.max(0, Number(count) || 0);
-    const countElement = button.querySelector('.count');
-
-    if (countElement) {
-        countElement.textContent = `(${safeCount})`;
-    }
-
-    button.dataset.baseCount = String(safeCount);
-}
-
-function applyPostCounterToVisiblePost(postId, counterType, count) {
-    document.querySelectorAll(`.post[data-post-id="${escapeCssValue(postId)}"]`).forEach((postElement) => {
-        if (counterType === 'upvotes') {
-            setPostActionCount(getPostActionButton(postElement, 'Upvote'), count);
-            return;
-        }
-
-        const insightsButton = getPostActionButton(postElement, 'Insights');
-        setPostActionCount(insightsButton, count);
-
-        const insightsPanel = postElement.querySelector('.inline-insights-panel');
-        if (insightsPanel) {
-            insightsPanel.dataset.commentCount = String(Math.max(0, Number(count) || 0));
-        }
-    });
-}
-
-function applyRealtimePostCounters() {
-    if (realtimeUpvoteCountsReady) {
-        realtimeUpvoteCountsByPost = countUpvotesByPost(realtimeUpvoteItems);
-        applyPostCounterMap('upvotes', realtimeUpvoteCountsByPost);
-    }
-
-    if (realtimeCommentCountsReady) {
-        applyPostCounterMap('comments', realtimeCommentCountsByPost);
-    }
-}
-
-function applyPostCounterMap(counterType, countMap) {
-    document.querySelectorAll('.post[data-post-id]').forEach((postElement) => {
-        const postId = String(postElement.dataset.postId || '');
-        if (!postId) return;
-        applyPostCounterToVisiblePost(postId, counterType, countMap.get(postId) || 0);
-    });
-}
-
-function countUpvotesByPost(upvotes = []) {
-    const countsByPost = new Map();
-
-    upvotes.forEach((upvote) => {
-        const postId = String(upvote.postId || '');
-        const userId = String(upvote.userId || '');
-        if (!postId || !userId) return;
-
-        if (!countsByPost.has(postId)) {
-            countsByPost.set(postId, new Set());
-        }
-
-        countsByPost.get(postId).add(userId);
-    });
-
-    return new Map([...countsByPost.entries()].map(([postId, userIds]) => [postId, userIds.size]));
-}
-
-function countCommentsByPost(comments = []) {
-    const countByPost = new Map();
-
-    comments.forEach((comment) => {
-        const postId = String(comment.postId || '');
-        if (!postId) return;
-        countByPost.set(postId, (countByPost.get(postId) || 0) + 1);
-    });
-
-    return countByPost;
-}
-
 function startNotificationRealtimeListener(userId) {
+    if (hasRealtimeListenerForUser('notifications', userId)) return;
+
     const notificationsQuery = firebaseQuery(
         firebaseCollection(firebaseDb, 'notifications'),
         firebaseWhere('userId', '==', userId),
@@ -5115,7 +5136,7 @@ function startNotificationRealtimeListener(userId) {
     );
 
     // Keeps the existing notification dropdown and badge in sync with Firestore.
-    realtimeUnsubscribers.notifications = firebaseOnSnapshot(notificationsQuery, (snapshot) => {
+    const unsubscribe = firebaseOnSnapshot(notificationsQuery, (snapshot) => {
         console.log('[realtime:notifications] snapshot received', {
             userId,
             size: snapshot.size,
@@ -5136,37 +5157,25 @@ function startNotificationRealtimeListener(userId) {
             .filter(shouldDisplayNotification)
             .sort((a, b) => parseNotificationTimestamp(b.createdAt) - parseNotificationTimestamp(a.createdAt));
 
+        realtimeNotificationsLoaded = true;
         displayNotifications(notifications);
         setNotificationBadgeCount(notifications.filter((notification) => !notification.read).length);
     }, (error) => {
         console.error('Realtime notifications failed; fetch fallback is still active:', error);
     });
-}
 
-function startStudyCircleRealtimeListener(userId) {
-    const joinedCirclesQuery = firebaseQuery(
-        firebaseCollection(firebaseDb, 'studyCircles'),
-        firebaseWhere('memberIds', 'array-contains', userId)
-    );
-
-    // The query result is the authoritative joined-circle list for posting.
-    realtimeUnsubscribers.studyCircles = firebaseOnSnapshot(joinedCirclesQuery, (snapshot) => {
-        studyCircles = mergeStudyCircles(getSnapshotItems(snapshot));
-        syncStudyCircleViews(studyCircles, { persist: true });
-    }, (error) => {
-        console.error('Realtime study circle membership failed; fetch fallback is still active:', error);
-    });
+    registerRealtimeListener('notifications', userId, unsubscribe);
 }
 
 function scheduleRealtimeFriendRefresh() {
     clearTimeout(realtimeFriendRefreshTimer);
 
     realtimeFriendRefreshTimer = setTimeout(async () => {
-        await loadFriends();
+        await loadFriends({ force: true });
         applyRealtimeMessagesToConversations(realtimeMessagesCache);
 
         if (friendSearchInput?.value.trim().length >= 2) {
-            await searchFriends();
+            await searchFriends({ force: true });
         }
 
         updateSearchProfileActions();
@@ -5177,28 +5186,30 @@ function startFriendRealtimeListeners(userId) {
     const friendRequestCollection = firebaseCollection(firebaseDb, 'friendRequests');
 
     // Incoming requests drive the Friend Requests panel and Accept Request states.
-    realtimeUnsubscribers.incomingFriendRequests = firebaseOnSnapshot(
-        firebaseQuery(friendRequestCollection, firebaseWhere('toUserId', '==', userId)),
-        scheduleRealtimeFriendRefresh,
-        (error) => console.error('Realtime incoming friend requests failed; fetch fallback is still active:', error)
-    );
+    if (!hasRealtimeListenerForUser('incomingFriendRequests', userId)) {
+        registerRealtimeListener(
+            'incomingFriendRequests',
+            userId,
+            firebaseOnSnapshot(
+                firebaseQuery(friendRequestCollection, firebaseWhere('toUserId', '==', userId)),
+                scheduleRealtimeFriendRefresh,
+                (error) => console.error('Realtime incoming friend requests failed; fetch fallback is still active:', error)
+            )
+        );
+    }
 
     // Outgoing requests drive Pending states in search/profile actions.
-    realtimeUnsubscribers.outgoingFriendRequests = firebaseOnSnapshot(
-        firebaseQuery(friendRequestCollection, firebaseWhere('fromUserId', '==', userId)),
-        scheduleRealtimeFriendRefresh,
-        (error) => console.error('Realtime outgoing friend requests failed; fetch fallback is still active:', error)
-    );
-
-    // Friendships drive friends list, inbox conversations, and circle member picker.
-    realtimeUnsubscribers.friendships = firebaseOnSnapshot(
-        firebaseQuery(
-            firebaseCollection(firebaseDb, 'friendships'),
-            firebaseWhere('userIds', 'array-contains', userId)
-        ),
-        scheduleRealtimeFriendRefresh,
-        (error) => console.error('Realtime friendships failed; fetch fallback is still active:', error)
-    );
+    if (!hasRealtimeListenerForUser('outgoingFriendRequests', userId)) {
+        registerRealtimeListener(
+            'outgoingFriendRequests',
+            userId,
+            firebaseOnSnapshot(
+                firebaseQuery(friendRequestCollection, firebaseWhere('fromUserId', '==', userId)),
+                scheduleRealtimeFriendRefresh,
+                (error) => console.error('Realtime outgoing friend requests failed; fetch fallback is still active:', error)
+            )
+        );
+    }
 }
 
 function applyRealtimeMessagesToConversations(realtimeMessages) {
@@ -5221,6 +5232,8 @@ function applyRealtimeMessagesToConversations(realtimeMessages) {
 }
 
 function startMessageRealtimeListener(userId) {
+    if (hasRealtimeListenerForUser('messages', userId)) return;
+
     const messagesQuery = firebaseQuery(
         firebaseCollection(firebaseDb, 'messages'),
         firebaseWhere('participantIds', 'array-contains', userId),
@@ -5228,53 +5241,34 @@ function startMessageRealtimeListener(userId) {
     );
 
     // Merges Firestore message snapshots into the existing inbox state by message id.
-    realtimeUnsubscribers.messages = firebaseOnSnapshot(messagesQuery, (snapshot) => {
+    const unsubscribe = firebaseOnSnapshot(messagesQuery, (snapshot) => {
         realtimeMessagesCache = getSnapshotItems(snapshot);
+        realtimeMessagesLoaded = true;
         applyRealtimeMessagesToConversations(realtimeMessagesCache);
     }, (error) => {
         console.error('Realtime messages failed; fetch fallback is still active:', error);
     });
-}
 
-function startPostCounterRealtimeListeners() {
-    realtimeUnsubscribers.postUpvotes = firebaseOnSnapshot(
-        firebaseCollection(firebaseDb, 'upvotes'),
-        (snapshot) => {
-            realtimeUpvoteItems = getSnapshotItems(snapshot);
-            realtimeUpvoteCountsByPost = countUpvotesByPost(realtimeUpvoteItems);
-            realtimeUpvoteCountsReady = true;
-            applyPostCounterMap('upvotes', realtimeUpvoteCountsByPost);
-        },
-        (error) => console.error('Realtime post upvote counters failed; fetch fallback is still active:', error)
-    );
-
-    realtimeUnsubscribers.postComments = firebaseOnSnapshot(
-        firebaseCollection(firebaseDb, 'comments'),
-        (snapshot) => {
-            realtimeCommentCountsByPost = countCommentsByPost(getSnapshotItems(snapshot));
-            realtimeCommentCountsReady = true;
-            applyPostCounterMap('comments', realtimeCommentCountsByPost);
-        },
-        (error) => console.error('Realtime post comment counters failed; fetch fallback is still active:', error)
-    );
+    registerRealtimeListener('messages', userId, unsubscribe);
 }
 
 function startRealtimeListeners() {
     const userId = getCurrentUserId();
 
     if (!userId || !isRealtimeReady()) return;
-    if (realtimeUserId === userId) return;
+    if (realtimeUserId === userId) {
+        logActiveRealtimeListenerCount('already-running', 'all');
+        return;
+    }
 
     stopRealtimeListeners();
     realtimeUserId = userId;
+    bindRealtimeLifecycleEvents();
 
-    startPresenceRealtimeListener(userId);
-    startSessionInvalidationListener(userId);
     startNotificationRealtimeListener(userId);
-    startStudyCircleRealtimeListener(userId);
     startFriendRealtimeListeners(userId);
     startMessageRealtimeListener(userId);
-    startPostCounterRealtimeListeners();
+    logActiveRealtimeListenerCount('ready', 'all');
 }
 
 // ========================================
@@ -5284,8 +5278,9 @@ function startRealtimeListeners() {
 function initLogout() {
     const logoutButton = document.querySelector('.profile-menu-logout')
 
-    if (!logoutButton) return
+    if (!logoutButton || logoutButton.dataset.ready === 'true') return
 
+    logoutButton.dataset.ready = 'true'
     logoutButton.addEventListener('click', handleLogout)
 }
 
@@ -5318,6 +5313,10 @@ function showLogoutConfirmation(title, message) {
 
 function clearSessionAndRedirect() {
     stopRealtimeListeners();
+    if (typeof authGatekeeperUnsubscribe === 'function') {
+        authGatekeeperUnsubscribe();
+        authGatekeeperUnsubscribe = null;
+    }
     localStorage.clear();
     sessionStorage.clear();
     window.location.href = 'Login.html';
@@ -5445,8 +5444,6 @@ async function loadUserProfileFromBackend() {
 }
 
 // ==================== NOTIFICATIONS ====================
-
-let notificationPollingInterval = null;
 
 function formatNotificationType(type) {
     const normalizedType = String(type || 'notification').replace(/_/g, ' ');
@@ -5654,6 +5651,7 @@ function displayNotifications(notifications) {
 async function loadNotifications() {
     try {
         if (!getCurrentUserId()) return;
+        if (isRealtimeListenerActive('notifications') && realtimeNotificationsLoaded) return;
 
         if (!friendDataLoaded) {
             await loadFriends();
@@ -5666,8 +5664,9 @@ async function loadNotifications() {
         if (!response.ok) throw new Error('Could not load notifications');
 
         const data = await response.json();
-        displayNotifications(data.notifications || []);
-        updateNotificationBadge();
+        const notifications = data.notifications || [];
+        displayNotifications(notifications);
+        setNotificationBadgeCount(notifications.filter((notification) => !notification.read).length);
     } catch (error) {
         console.error('Error loading notifications:', error);
     }
@@ -5676,6 +5675,7 @@ async function loadNotifications() {
 async function updateNotificationBadge() {
     try {
         if (!getCurrentUserId()) return;
+        if (isRealtimeListenerActive('notifications') && realtimeNotificationsLoaded) return;
 
         const response = await fetch(`${API_BASE_URL}/notifications/unread-count`, {
             headers: getAuthHeaders()
@@ -5751,13 +5751,6 @@ async function clearNotifications() {
     }
 }
 
-function stopNotificationPolling() {
-    if (notificationPollingInterval) {
-        clearInterval(notificationPollingInterval);
-        notificationPollingInterval = null;
-    }
-}
-
 function setNotificationsDropdownOpen(isOpen) {
     notificationsDropdown.classList.toggle('open', isOpen);
     notificationBell.setAttribute('aria-expanded', String(isOpen));
@@ -5765,16 +5758,14 @@ function setNotificationsDropdownOpen(isOpen) {
 
     if (isOpen) {
         loadNotifications();
-        stopNotificationPolling();
-        notificationPollingInterval = setInterval(loadNotifications, 30000);
-    } else {
-        stopNotificationPolling();
     }
 }
 
 function initNotificationPanel() {
     if (!notificationBell || !notificationsDropdown || !notificationsContainer) return;
+    if (notificationsContainer.dataset.ready === 'true') return;
 
+    notificationsContainer.dataset.ready = 'true';
     setNotificationsDropdownOpen(false);
 
     // Toggle dropdown on bell click
@@ -5799,8 +5790,9 @@ function initNotificationPanel() {
         clearNotificationsBtn.addEventListener('click', clearNotifications);
     }
 
-    // Load initial notifications
-    updateNotificationBadge();
+    if (!isRealtimeListenerActive('notifications')) {
+        updateNotificationBadge();
+    }
 }
 
 
@@ -5849,8 +5841,8 @@ async function initDashboard() {
     initLogout();
     initGlobalSearch();
     initSearchProfileModal();
-    initNotificationPanel();
     startRealtimeListeners();
+    initNotificationPanel();
 }
 
 initDashboard();

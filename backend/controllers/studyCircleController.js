@@ -60,11 +60,12 @@ async function seedDefaultCircles() {
 
 const getCircles = async (req, res) => {
   try {
-    let circles = await firestoreService.getStudyCircles()
+    const userId = req.user?.id || 'default-user'
+    let circles = await firestoreService.getStudyCirclesForUser(userId)
 
-    if (circles.length === 0) {
+    if (userId === 'default-user' && circles.length === 0) {
       await seedDefaultCircles()
-      circles = await firestoreService.getStudyCircles()
+      circles = await firestoreService.getStudyCirclesForUser(userId)
     }
 
     return res.json(circles)

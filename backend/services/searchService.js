@@ -2,7 +2,8 @@ const firestoreService = require('./firestoreService')
 const defaultStudyCircles = require('../data/studyCirclesStore')
 
 const DEFAULT_LIMIT = 6
-const FALLBACK_LIMIT = 80
+const FALLBACK_LIMIT = 24
+let defaultCirclesSeedChecked = false
 
 function normalizeSearchText(value) {
   if (Array.isArray(value)) {
@@ -91,7 +92,7 @@ async function searchCollection(config, queryText, limit = DEFAULT_LIMIT) {
   const query = String(queryText || '').trim()
   const tokens = getSearchTokens(query)
 
-  if (!query || tokens.length === 0) {
+  if (!query || query.length < 2 || tokens.length === 0) {
     return []
   }
 
@@ -118,11 +119,13 @@ async function searchCollection(config, queryText, limit = DEFAULT_LIMIT) {
     )
   }
 
-  await addQueryResults(
-    records,
-    config.collection,
-    collection.limit(FALLBACK_LIMIT)
-  )
+  if (records.size < limit * 2) {
+    await addQueryResults(
+      records,
+      config.collection,
+      collection.limit(FALLBACK_LIMIT)
+    )
+  }
 
   return [...records.values()]
     .filter((record) => matchesQuery(record.data, config.searchFields, tokens))
@@ -236,10 +239,13 @@ async function searchUsers(query, limit = DEFAULT_LIMIT) {
 }
 
 async function searchCircles(query, limit = DEFAULT_LIMIT) {
-  const existingCircles = await firestoreService.getStudyCircles()
+  if (!defaultCirclesSeedChecked) {
+    defaultCirclesSeedChecked = true
+    const existingCircles = await firestoreService.getStudyCircles()
 
-  if (existingCircles.length === 0) {
-    await Promise.all(defaultStudyCircles.map((circle) => firestoreService.saveStudyCircle(circle)))
+    if (existingCircles.length === 0) {
+      await Promise.all(defaultStudyCircles.map((circle) => firestoreService.saveStudyCircle(circle)))
+    }
   }
 
   return searchCollection({

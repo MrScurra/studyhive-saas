@@ -114,7 +114,15 @@ const PostInteractions = (() => {
         button.type = 'button'
         button.setAttribute('aria-pressed', 'false')
         getBaseUpvoteCount(button)
-        loadUpvoteStatus(button)
+
+        if (button.dataset.statusLoaded === 'true') {
+          updateUpvoteUI(button, {
+            upvoted: button.dataset.upvoted === 'true',
+            count: getVisibleCount(button)
+          })
+        } else {
+          loadUpvoteStatus(button)
+        }
       }
     })
 
@@ -196,6 +204,8 @@ const PostInteractions = (() => {
       button.dataset.baseCount = String(data.count)
     }
 
+    button.dataset.statusLoaded = 'true'
+    button.dataset.upvoted = String(upvoted)
     button.classList.toggle('active', upvoted)
     button.setAttribute('aria-pressed', String(upvoted))
     button.style.color = upvoted ? 'var(--primary-yellow)' : 'inherit'
@@ -212,7 +222,14 @@ const PostInteractions = (() => {
 
         btn.dataset.bookmarkReady = 'true'
         btn.addEventListener('click', handleBookmark);
-        loadBookmarkStatus(btn);
+
+        if (btn.dataset.statusLoaded === 'true') {
+          updateBookmarkUI(btn, {
+            bookmarked: btn.dataset.bookmarked === 'true'
+          });
+        } else {
+          loadBookmarkStatus(btn);
+        }
       }
     });
   };
@@ -271,6 +288,9 @@ const PostInteractions = (() => {
   };
 
   const updateBookmarkUI = (button, data = {}) => {
+    button.dataset.statusLoaded = 'true';
+    button.dataset.bookmarked = String(Boolean(data.bookmarked));
+
     if (data.bookmarked) {
       button.classList.add('active');
       button.style.color = 'var(--primary-yellow)';
