@@ -392,7 +392,8 @@ body.dark-mode .clear-notifications-btn:hover {
 /* Responsive */
 @media (max-width: 768px) {
     .notifications-dropdown {
-        width: 320px;
+        width: min(360px, calc(100vw - 24px));
+        right: 0;
         max-height: 400px;
     }
 
@@ -408,8 +409,22 @@ body.dark-mode .clear-notifications-btn:hover {
 
 @media (max-width: 480px) {
     .notifications-dropdown {
-        width: 280px;
-        right: -20px;
+        position: fixed;
+        top: 104px;
+        right: 12px;
+        left: 12px;
+        width: auto;
+        max-height: min(70vh, 420px);
+    }
+
+    .notifications-header {
+        gap: 8px;
+        align-items: flex-start;
+    }
+
+    .notification-header-actions {
+        flex-wrap: wrap;
+        justify-content: flex-end;
     }
 
     .notifications-header h3 {

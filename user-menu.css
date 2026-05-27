@@ -88,8 +88,27 @@ body.dark-mode .profile-menu-logout {
     color: #ff7961;
 }
 
+@media (max-width: 768px) {
+    .user-profile {
+        min-width: 0;
+    }
+
+    .profile-menu {
+        max-width: calc(100vw - 24px);
+    }
+}
+
 @media (max-width: 480px) {
     .user-name {
         display: none;
+    }
+
+    .profile-menu {
+        position: fixed;
+        top: 104px;
+        right: 12px;
+        left: 12px;
+        width: auto;
+        max-width: none;
     }
 }

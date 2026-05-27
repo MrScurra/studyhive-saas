@@ -7,6 +7,17 @@
     box-sizing: border-box;
 }
 
+html {
+    max-width: 100%;
+    overflow-x: hidden;
+}
+
+img,
+video,
+canvas {
+    max-width: 100%;
+}
+
 :root {
     --primary-yellow: #f4b400;
     --dark-bg: #2d2d2d;
@@ -22,6 +33,7 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     background-color: var(--light-bg);
     color: var(--text-dark);
+    overflow-x: hidden;
 }
 
 body.dark-mode {    
@@ -561,7 +573,7 @@ body.dark-mode .search-profile-action.unfriend {
     max-width: 1400px;
     margin: 0 auto;
     display: grid;
-    grid-template-columns: 200px 1fr 280px;
+    grid-template-columns: 200px minmax(0, 1fr) 280px;
     gap: 20px;
     padding: 20px;
     min-height: calc(100vh - 80px);
@@ -572,12 +584,14 @@ body.dark-mode .search-profile-action.unfriend {
     display: flex;
     flex-direction: column;
     gap: 20px;
+    min-width: 0;
 }
 
 .dashboard-section {
     display: flex;
     flex-direction: column;
     gap: 20px;
+    min-width: 0;
 }
 
 .dashboard-section[hidden] {
@@ -609,6 +623,7 @@ body.dark-mode .search-profile-action.unfriend {
     border-radius: 12px;
     padding: 20px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    min-width: 0;
 }
 
 .create-post textarea {
@@ -645,6 +660,7 @@ body.dark-mode .search-profile-action.unfriend {
     display: flex;
     flex-direction: column;
     gap: 6px;
+    min-width: 0;
 }
 
 .action-btn {
@@ -708,6 +724,7 @@ body.dark-mode .search-profile-action.unfriend {
     display: flex;
     flex-direction: column;
     gap: 20px;
+    min-width: 0;
 }
 
 /* Post Styles */
@@ -717,6 +734,7 @@ body.dark-mode .search-profile-action.unfriend {
     padding: 20px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
     transition: box-shadow 0.3s ease;
+    min-width: 0;
 }
 
 .post:hover {
@@ -803,6 +821,7 @@ body.dark-mode .category-label {
     gap: 10px;
     margin-bottom: 15px;
     transition: all 0.3s ease;
+    min-width: 0;
 }
 
 a.post-attachment {
@@ -825,6 +844,10 @@ a.post-attachment {
     font-size: 13px;
     color: var(--text-dark);
     flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .attachment-size {
@@ -837,6 +860,7 @@ a.post-attachment {
     gap: 10px;
     border-top: 1px solid var(--border-color);
     padding-top: 12px;
+    flex-wrap: wrap;
 }
 
 .action-stat {
@@ -4217,7 +4241,7 @@ body.dark-mode .btn-secondary:hover {
 /* Responsive Design */
 @media (max-width: 1024px) {
     .main-container {
-        grid-template-columns: 160px 1fr 220px;
+        grid-template-columns: 160px minmax(0, 1fr) 220px;
         gap: 15px;
         padding: 15px;
     }
@@ -4228,6 +4252,23 @@ body.dark-mode .btn-secondary:hover {
 
     .search-bar {
         max-width: 400px;
+    }
+
+    .logo {
+        min-width: 130px;
+    }
+
+    .logo-text {
+        font-size: 24px;
+    }
+
+    .inbox-container {
+        grid-template-columns: minmax(250px, 0.42fr) minmax(0, 1fr);
+        padding: 16px;
+    }
+
+    .message-content {
+        max-width: min(78%, 560px);
     }
 
     .profile-hero-card {
@@ -4272,19 +4313,40 @@ body.dark-mode .btn-secondary:hover {
     .main-container {
         grid-template-columns: 1fr;
         gap: 15px;
+        padding: 14px;
+    }
+
+    .main-content {
+        order: 2;
     }
 
     .header-container {
-        flex-direction: column;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto auto;
         gap: 10px;
+        align-items: center;
     }
 
     .search-bar {
+        grid-column: 1 / -1;
+        grid-row: 2;
         max-width: 100%;
+        width: 100%;
+    }
+
+    .notifications-container,
+    .user-profile {
+        justify-self: end;
     }
 
     .create-actions {
         flex-direction: column;
+        align-items: stretch;
+    }
+
+    .attach-control,
+    .category-select {
+        width: 100%;
     }
 
     .action-btn {
@@ -4373,19 +4435,124 @@ body.dark-mode .btn-secondary:hover {
     .report-header {
         padding: 22px;
     }
+
+    .post-header {
+        gap: 12px;
+    }
+
+    .post-attachment {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .attachment-name {
+        flex-basis: calc(100% - 34px);
+    }
+
+    .inbox-container {
+        grid-template-columns: 1fr;
+        height: auto;
+        min-height: 0;
+        padding: 14px;
+    }
+
+    .conversations-panel,
+    .thread-panel {
+        min-height: 0;
+    }
+
+    .conversations-list {
+        max-height: 340px;
+    }
+
+    .thread-content {
+        min-height: 440px;
+    }
+
+    .messages-list {
+        min-height: 320px;
+    }
+
+    .message-content {
+        max-width: min(84%, 560px);
+    }
+
+    .saved-page {
+        padding: 16px;
+    }
+
+    .bookmarked-item-actions {
+        flex-wrap: wrap;
+    }
+
+    .create-circle-modal {
+        padding: 14px;
+    }
+
+    .create-circle-dialog {
+        width: min(500px, 100%);
+    }
+
+    .invite-link-container {
+        flex-direction: column;
+    }
+
+    .copy-link-btn {
+        width: 100%;
+    }
 }
 
 @media (max-width: 480px) {
     .header-container {
         padding: 0 10px;
+        grid-template-columns: auto minmax(0, 1fr) auto auto;
+    }
+
+    .header {
+        padding: 10px 0;
+    }
+
+    .logo {
+        min-width: 0;
+    }
+
+    .logo-img {
+        width: 34px;
+        height: 34px;
     }
 
     .logo-text {
-        display: none;
+        display: inline;
+        font-size: 20px;
+    }
+
+    .search-bar {
+        padding: 9px 12px;
+        border-radius: 18px;
+    }
+
+    .search-results-dropdown {
+        max-height: min(68vh, 430px);
+    }
+
+    .main-container {
+        padding: 10px;
+        gap: 12px;
     }
 
     .post {
-        padding: 15px;
+        padding: 14px;
+        border-radius: 10px;
+    }
+
+    .post-user {
+        gap: 10px;
+    }
+
+    .post-avatar {
+        width: 40px;
+        height: 40px;
+        flex-basis: 40px;
     }
 
     .post-actions {
@@ -4395,6 +4562,14 @@ body.dark-mode .btn-secondary:hover {
     .action-stat {
         width: 100%;
         justify-content: center;
+    }
+
+    .create-post {
+        padding: 14px;
+    }
+
+    .selected-file {
+        max-width: 100%;
     }
 
     .profile-page {
@@ -4518,23 +4693,33 @@ body.dark-mode .btn-secondary:hover {
     }
 
     /* Saved Section Responsive */
+    .saved-page {
+        padding: 0;
+    }
+
     .saved-header {
-        padding: 20px;
+        padding: 16px 0 12px;
     }
 
     .bookmarked-items {
-        padding: 0 16px 16px;
+        padding: 0 0 12px;
     }
 
     .bookmarked-item {
         margin-bottom: 12px;
+        border-radius: 10px;
+    }
+
+    .bookmarked-item-header {
+        padding: 14px;
     }
 
     .bookmarked-item-content {
-        padding: 16px;
+        padding: 14px;
     }
 
     .bookmarked-item-actions {
+        flex-direction: column;
         padding-top: 12px;
         gap: 8px;
     }
@@ -4547,7 +4732,9 @@ body.dark-mode .btn-secondary:hover {
 
     /* Inbox Section Responsive */
     .inbox-container {
-        height: calc(100vh - 200px);
+        height: auto;
+        padding: 0;
+        gap: 12px;
     }
 
     .conversations-panel {
@@ -4556,7 +4743,7 @@ body.dark-mode .btn-secondary:hover {
     }
 
     .conversations-list {
-        max-height: 300px;
+        max-height: 280px;
     }
 
     .thread-panel {
@@ -4568,11 +4755,79 @@ body.dark-mode .btn-secondary:hover {
     }
 
     .messages-list {
-        height: 300px;
+        min-height: 300px;
+        max-height: 54vh;
+        padding: 14px;
     }
 
     .message {
-        padding: 12px 16px;
+        gap: 8px;
+    }
+
+    .message-avatar {
+        width: 32px;
+        height: 32px;
+        min-width: 32px;
+        font-size: 12px;
+    }
+
+    .message-content {
+        max-width: calc(100% - 44px);
+    }
+
+    .message-text {
+        font-size: 13px;
+    }
+
+    .thread-members {
+        max-height: 58px;
+        overflow-y: auto;
+    }
+
+    .friend-search-controls {
+        grid-template-columns: 1fr;
+    }
+
+    .friend-search-controls button,
+    .friend-action-btn {
+        width: 100%;
+        min-height: 34px;
+    }
+
+    .friend-result-item,
+    .friend-request-item,
+    .friend-list-item {
+        align-items: flex-start;
+        flex-wrap: wrap;
+    }
+
+    .friend-request-actions,
+    .friend-list-actions {
+        width: 100%;
+    }
+
+    .create-circle-dialog {
+        max-height: 92vh;
+        border-radius: 10px;
+    }
+
+    .create-circle-header,
+    .create-circle-form-container {
+        padding: 16px;
+    }
+
+    .create-circle-actions {
+        flex-direction: column-reverse;
+        padding-bottom: 0;
+    }
+
+    .create-circle-actions .btn-primary,
+    .create-circle-actions .btn-secondary {
+        width: 100%;
+    }
+
+    .member-selection-container {
+        max-height: 210px;
     }
 
     .message-input-area {
