@@ -405,7 +405,7 @@ function normalizePresenceFriend(friend = {}) {
         ...friend,
         id: friend.id || friend.userId || friend.uid,
         displayName: friend.displayName || friend.name || friend.fullName || friend.presence?.displayName || 'StudyHive User',
-        avatarUrl: friend.avatarUrl || friend.avatar || friend.presence?.avatarUrl || DEFAULT_PROFILE_AVATAR
+        avatarUrl: getInboxProfileAvatarSource(friend.avatarUrl, friend.avatar, friend.presence?.avatarUrl)
     };
 }
 
@@ -1134,23 +1134,66 @@ function getInitials(value = '') {
     return parts.slice(0, 2).map(part => part.charAt(0)).join('').toUpperCase() || 'SH';
 }
 
+function getInboxProfileAvatarSource(...sources) {
+    for (const source of sources) {
+        const avatarSource = normalizeProfileAvatarSource(source);
+
+        if (avatarSource && isImageSearchAvatar(avatarSource)) {
+            return avatarSource;
+        }
+    }
+
+    return '';
+}
+
+function createInboxInitialsAvatar(className, name) {
+    const avatar = createTextElement('div', className, getInitials(name));
+    avatar.style.backgroundColor = getAvatarColor(name);
+    avatar.style.display = 'flex';
+    avatar.style.alignItems = 'center';
+    avatar.style.justifyContent = 'center';
+    return avatar;
+}
+
+function normalizeInboxFriend(friend = {}) {
+    const displayName = friend.displayName || friend.name || friend.fullName || friend.username || friend.email || 'StudyHive User';
+    const avatarUrl = getInboxProfileAvatarSource(friend.avatarUrl, friend.avatar, friend.photoURL);
+
+    return {
+        ...friend,
+        id: friend.id || friend.userId || friend.uid,
+        displayName,
+        avatarUrl,
+        avatar: avatarUrl || friend.avatar || ''
+    };
+}
+
+function normalizeInboxFriendRequest(request = {}) {
+    return {
+        ...request,
+        fromAvatar: getInboxProfileAvatarSource(request.fromAvatar),
+        toAvatar: getInboxProfileAvatarSource(request.toAvatar)
+    };
+}
+
 function buildFriendshipConversationId(friend) {
     const friendshipId = friend.friendshipId || [getCurrentUserId(), friend.id].sort().join('_');
     return `friend-${friendshipId}`;
 }
 
 function buildFriendConversation(friend) {
-    const displayName = friend.displayName || friend.name || 'StudyHive User';
+    const normalizedFriend = normalizeInboxFriend(friend);
+    const displayName = normalizedFriend.displayName || normalizedFriend.name || 'StudyHive User';
 
     return {
-        id: buildFriendshipConversationId(friend),
+        id: buildFriendshipConversationId(normalizedFriend),
         name: displayName,
         avatar: getInitials(displayName),
-        avatarUrl: friend.avatarUrl || friend.avatar || './frontend/assets/profile-picture/default-profile-picture.webp',
+        avatarUrl: normalizedFriend.avatarUrl,
         preview: 'Start a conversation',
         members: [currentUser.name, displayName],
-        memberUserIds: [friend.id],
-        friendId: friend.id,
+        memberUserIds: [normalizedFriend.id],
+        friendId: normalizedFriend.id,
         isFriendConversation: true
     };
 }
@@ -3022,10 +3065,19 @@ function syncFriendConversations() {
 }
 
 function createFriendAvatar(src, name) {
+    const avatarSrc = getInboxProfileAvatarSource(src);
+
+    if (!avatarSrc) {
+        return createInboxInitialsAvatar('friend-avatar', name || 'StudyHive friend');
+    }
+
     const avatar = document.createElement('img');
     avatar.className = 'friend-avatar';
-    avatar.src = normalizeProfileAvatarSource(src || DEFAULT_PROFILE_AVATAR);
+    avatar.src = avatarSrc;
     avatar.alt = name || 'StudyHive friend';
+    avatar.addEventListener('error', () => {
+        avatar.replaceWith(createInboxInitialsAvatar('friend-avatar', name || 'StudyHive friend'));
+    });
     return avatar;
 }
 
@@ -3198,8 +3250,14 @@ async function loadFriends({ force = false } = {}) {
             }
 
             const data = await response.json();
-            acceptedFriends = Array.isArray(data.friends) ? data.friends : [];
+            acceptedFriends = Array.isArray(data.friends) ? data.friends.map(normalizeInboxFriend) : [];
             friendRequests = data.requests || { incoming: [], outgoing: [] };
+            friendRequests.incoming = Array.isArray(friendRequests.incoming)
+                ? friendRequests.incoming.map(normalizeInboxFriendRequest)
+                : [];
+            friendRequests.outgoing = Array.isArray(friendRequests.outgoing)
+                ? friendRequests.outgoing.map(normalizeInboxFriendRequest)
+                : [];
             friendDataLoaded = true;
             friendsLoadedAt = Date.now();
 
@@ -3621,19 +3679,37 @@ function getConversationFriend(conversation = {}) {
     return null;
 }
 
-function getMessageAvatarSource(message = {}, conversation = {}, isOwn = false) {
-    if (isOwn) {
-        return normalizeProfileAvatarSource(message.avatar
-            || localStorage.getItem('userAvatar')
-            || currentUser.avatar
-            || DEFAULT_PROFILE_AVATAR);
+function getMessageSenderId(message = {}) {
+    return String(message.senderId || message.userId || message.fromUserId || '').trim();
+}
+
+function getMessageSenderFriend(message = {}, conversation = {}) {
+    const senderId = getMessageSenderId(message);
+
+    if (senderId) {
+        const senderFriend = getFriendById(senderId);
+        if (senderFriend) return senderFriend;
     }
 
-    const friend = getConversationFriend(conversation);
-    return normalizeProfileAvatarSource(message.avatar
-        || friend?.avatarUrl
-        || conversation.avatarUrl
-        || DEFAULT_PROFILE_AVATAR);
+    return getConversationFriend(conversation);
+}
+
+function getMessageAvatarSource(message = {}, conversation = {}, isOwn = false) {
+    if (isOwn) {
+        return getInboxProfileAvatarSource(
+            localStorage.getItem('userAvatar'),
+            currentUser.avatar,
+            message.avatar
+        );
+    }
+
+    const senderFriend = getMessageSenderFriend(message, conversation);
+    return getInboxProfileAvatarSource(
+        senderFriend?.avatarUrl,
+        senderFriend?.avatar,
+        message.avatar,
+        conversation.isFriendConversation ? conversation.avatarUrl : ''
+    );
 }
 
 function getAvatarColor(value = '') {
@@ -3643,22 +3719,20 @@ function getAvatarColor(value = '') {
 }
 
 function createMessageAvatarElement(author, avatarSrc) {
-    if (avatarSrc && isImageSearchAvatar(avatarSrc)) {
+    const normalizedAvatarSrc = getInboxProfileAvatarSource(avatarSrc);
+
+    if (normalizedAvatarSrc) {
         const avatar = document.createElement('img');
         avatar.className = 'message-avatar';
-        avatar.src = normalizeProfileAvatarSource(avatarSrc);
+        avatar.src = normalizedAvatarSrc;
         avatar.alt = `${author} avatar`;
         avatar.addEventListener('error', () => {
-            const fallback = createTextElement('div', 'message-avatar', getInitials(author));
-            fallback.style.backgroundColor = getAvatarColor(author);
-            avatar.replaceWith(fallback);
+            avatar.replaceWith(createInboxInitialsAvatar('message-avatar', author));
         });
         return avatar;
     }
 
-    const avatar = createTextElement('div', 'message-avatar', getInitials(author));
-    avatar.style.backgroundColor = getAvatarColor(author);
-    return avatar;
+    return createInboxInitialsAvatar('message-avatar', author);
 }
 
 function updateConversationMessagesFromList(messages) {
@@ -3711,14 +3785,15 @@ function renderConversationList() {
     conversations.forEach((conversation) => {
         const convElement = document.createElement('div');
         convElement.className = `conversation-item ${String(selectedConversationId) === String(conversation.id) ? 'active' : ''}`;
+        const conversationAvatarSrc = getInboxProfileAvatarSource(conversation.avatarUrl);
 
         const avatar = document.createElement('div');
-        avatar.className = `conversation-avatar ${conversation.avatarUrl ? 'has-image' : ''}`.trim();
+        avatar.className = `conversation-avatar ${conversationAvatarSrc ? 'has-image' : ''}`.trim();
 
-        if (conversation.avatarUrl) {
+        if (conversationAvatarSrc) {
             const avatarImage = document.createElement('img');
             avatarImage.className = 'conversation-avatar-img';
-            avatarImage.src = normalizeProfileAvatarSource(conversation.avatarUrl);
+            avatarImage.src = conversationAvatarSrc;
             avatarImage.alt = `${conversation.name}'s avatar`;
             avatarImage.addEventListener('error', () => {
                 avatar.classList.remove('has-image');
