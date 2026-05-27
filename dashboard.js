@@ -1,7 +1,7 @@
 // StudyHive Dashboard
 // Main page controller for feed composer and dashboard feature panels.
 const StudyHive = window.StudyHive = window.StudyHive || {};
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = (window.StudyHiveConfig?.apiBaseUrl || 'http://localhost:5000/api').replace(/\/$/, '');
 const DEFAULT_CATEGORY_OPTIONS = [
     { value: 'General', text: 'General' }
 ];
@@ -976,10 +976,18 @@ function resolveAttachmentUrl(fileUrl) {
     }
 
     if (fileUrl.startsWith('/api/')) {
-        return `http://localhost:5000${fileUrl}`;
+        return `${getApiOrigin()}${fileUrl}`;
     }
 
     return fileUrl;
+}
+
+function getApiOrigin() {
+    try {
+        return new URL(API_BASE_URL, window.location.href).origin;
+    } catch (error) {
+        return API_BASE_URL.replace(/\/api\/?$/i, '');
+    }
 }
 
 function getPostAttachmentData(post) {

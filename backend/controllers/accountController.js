@@ -2,8 +2,7 @@ const fs = require('fs')
 const path = require('path')
 const admin = require('firebase-admin')
 const firestoreService = require('../services/firestoreService')
-
-const uploadsDir = path.join(__dirname, '../uploads')
+const { uploadsDir } = require('../config/paths')
 
 function getCurrentUserId(req) {
   return String(req.user?.id || req.userId || '').trim()

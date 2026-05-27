@@ -1,5 +1,12 @@
 node_modules/
+**/node_modules/
 .env
+.env.*
+!.env.example
+!**/.env.example
 serviceAccountKey.json
+**/serviceAccountKey.json
 uploads/
+**/uploads/
+*:Zone.Identifier
 .DS_Store

@@ -2,6 +2,26 @@ const admin = require('firebase-admin');
 
 let db = null;
 
+function getServiceAccountFromEnv() {
+  if (process.env.FIREBASE_SERVICE_ACCOUNT_BASE64) {
+    return JSON.parse(Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64, 'base64').toString('utf8'));
+  }
+
+  if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+    return JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+  }
+
+  if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
+    return {
+      project_id: process.env.FIREBASE_PROJECT_ID,
+      client_email: process.env.FIREBASE_CLIENT_EMAIL,
+      private_key: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
+    };
+  }
+
+  return require('../serviceAccountKey.json');
+}
+
 const isQuotaError = (error = {}) => {
   const message = String(error.message || error.details || '').toLowerCase();
   const code = String(error.code || error.status || '').toLowerCase();
@@ -24,13 +44,11 @@ const initializeFirestore = () => {
       // Use Application Default Credentials
       // For local development, you can set GOOGLE_APPLICATION_CREDENTIALS environment variable
       // pointing to your service account JSON file
-      const serviceAccount = process.env.FIREBASE_SERVICE_ACCOUNT
-        ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
-        : require('../serviceAccountKey.json');
+      const serviceAccount = getServiceAccountFromEnv();
 
       admin.initializeApp({
         credential: admin.credential.cert(serviceAccount),
-        projectId: 'study-collab-saas-js'
+        projectId: process.env.FIREBASE_PROJECT_ID || serviceAccount.project_id || 'study-collab-saas-js'
       });
     }
 

@@ -2,8 +2,8 @@ const profileStore = require('../data/profileStore')
 const firestoreService = require('../services/firestoreService')
 const fs = require('fs')
 const path = require('path')
+const { uploadsDir } = require('../config/paths')
 
-const uploadsDir = path.join(__dirname, '../uploads')
 const defaultAvatar = './frontend/assets/profile-picture/default-profile-picture.webp'
 
 function getAvatarUrl(req, filename) {

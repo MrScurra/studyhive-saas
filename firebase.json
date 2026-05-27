@@ -1,0 +1,32 @@
+{
+  "hosting": {
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      ".firebaserc",
+      "**/.*",
+      "backend/**",
+      "render.yaml",
+      "serviceAccountKey.json",
+      "**/serviceAccountKey.json",
+      "uploads/**",
+      "**/uploads/**",
+      "**/node_modules/**",
+      "**/*.md",
+      "LOGIN_DIAGNOSTIC.js",
+      "*:Zone.Identifier"
+    ],
+    "headers": [
+      {
+        "source": "/api-config.js",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      }
+    ],
+    "cleanUrls": true
+  }
+}

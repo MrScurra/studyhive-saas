@@ -9,7 +9,7 @@ const PostInteractions = (() => {
   // CONFIG & STATE
   // ========================================
 
-  const API_BASE_URL = 'http://localhost:5000/api'
+  const API_BASE_URL = (window.StudyHiveConfig?.apiBaseUrl || 'http://localhost:5000/api').replace(/\/$/, '')
   const STORAGE_KEYS = {
     upvotes: 'studyhive_upvotes',
     bookmarks: 'studyhive_bookmarks',

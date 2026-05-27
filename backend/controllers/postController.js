@@ -2,6 +2,7 @@ const firestoreService = require('../services/firestoreService')
 const fallbackPosts = require('../data/postsStore')
 const fs = require('fs')
 const path = require('path')
+const { uploadsDir } = require('../config/paths')
 
 function formatFileSize(bytes) {
   if (!bytes) return '0 KB'
@@ -484,7 +485,7 @@ function downloadFile(req, res, next) {
       return res.status(400).json({ error: 'Invalid filename' })
     }
 
-    const filepath = path.join(__dirname, '../uploads', filename)
+    const filepath = path.join(uploadsDir, filename)
 
     if (!fs.existsSync(filepath)) {
       return res.status(404).json({ error: 'File not found' })

@@ -1,3 +1,6 @@
+const { loadEnvFile } = require('./config/env')
+loadEnvFile()
+
 const express = require('express')
 const cors = require('cors')
 const firestoreService = require('./services/firestoreService')
@@ -21,6 +24,23 @@ const errorHandler = require('./middleware/errorHandler')
 
 const app = express()
 const PORT = process.env.PORT || 5000
+const allowedOrigins = String(process.env.FRONTEND_ORIGIN || process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean)
+
+function resolveCorsOrigin(origin, callback) {
+  if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+    callback(null, true)
+    return
+  }
+
+  callback(new Error(`CORS blocked origin: ${origin}`))
+}
+
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1)
+}
 
 // Initialize Firestore on server startup
 try {
@@ -28,11 +48,13 @@ try {
   console.log('✓ Firestore initialized')
 } catch (error) {
   console.warn('⚠ Firestore initialization attempted:', error.message)
-  console.warn('  If this fails, make sure serviceAccountKey.json exists or set FIREBASE_SERVICE_ACCOUNT env var')
+  console.warn('  If this fails, set FIREBASE_SERVICE_ACCOUNT_BASE64, FIREBASE_SERVICE_ACCOUNT, or a local serviceAccountKey.json')
 }
 
 // Basic app middleware
-app.use(cors())
+app.use(cors({
+  origin: resolveCorsOrigin
+}))
 app.use(express.json())
 app.use(addCurrentUser)
 

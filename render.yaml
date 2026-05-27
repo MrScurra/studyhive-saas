@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: studyhive-api
+    env: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: FIREBASE_PROJECT_ID
+        value: study-collab-saas-js
+      - key: FIREBASE_SERVICE_ACCOUNT_BASE64
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: UPLOADS_DIR
+        value: ./uploads
