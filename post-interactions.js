@@ -10,6 +10,9 @@ const PostInteractions = (() => {
   // ========================================
 
   const API_BASE_URL = (window.StudyHiveConfig?.apiBaseUrl || 'http://localhost:5000/api').replace(/\/$/, '')
+  const DEFAULT_PROFILE_AVATAR = './frontend/assets/profile-picture/default-profile-picture.webp'
+  const PRODUCTION_PROFILE_AVATAR_BASE_URL = 'https://studyhive-saas.onrender.com/api/profile/avatar/'
+  const PROFILE_AVATAR_PATH = '/api/profile/avatar/'
   const STORAGE_KEYS = {
     upvotes: 'studyhive_upvotes',
     bookmarks: 'studyhive_bookmarks',
@@ -66,8 +69,30 @@ const PostInteractions = (() => {
   };
 
   const getCurrentUserAvatar = () => {
-    return localStorage.getItem('userAvatar') || './frontend/assets/profile-picture/default-profile-picture.webp';
+    return normalizeProfileAvatarSource(localStorage.getItem('userAvatar') || DEFAULT_PROFILE_AVATAR);
   };
+
+  function normalizeProfileAvatarSource(source) {
+    const avatarSource = String(source || '').trim()
+
+    if (!avatarSource) return avatarSource
+
+    try {
+      const parsedUrl = new URL(avatarSource, window.location.href)
+      const isLocalApi = (parsedUrl.hostname === 'localhost' || parsedUrl.hostname === '127.0.0.1')
+        && parsedUrl.port === '5000'
+        && parsedUrl.pathname.startsWith(PROFILE_AVATAR_PATH)
+
+      if (isLocalApi) {
+        const filename = parsedUrl.pathname.slice(PROFILE_AVATAR_PATH.length)
+        return `${PRODUCTION_PROFILE_AVATAR_BASE_URL}${filename}${parsedUrl.search}`
+      }
+    } catch (error) {
+      return avatarSource
+    }
+
+    return avatarSource
+  }
 
   const getCurrentUserEmail = () => {
     return localStorage.getItem('userEmail') || 'user@studyhive.local';
@@ -553,7 +578,7 @@ const PostInteractions = (() => {
     setUserInfo: (userId, fullName, avatar, email) => {
       localStorage.setItem('userId', userId)
       localStorage.setItem('userFullName', fullName)
-      localStorage.setItem('userAvatar', avatar)
+      localStorage.setItem('userAvatar', normalizeProfileAvatarSource(avatar))
       localStorage.setItem('userEmail', email || 'user@studyhive.local')
     },
 

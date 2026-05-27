@@ -18,8 +18,7 @@ function isSafeUploadFilename(filename) {
 }
 
 function getPersistableAvatarUrl(value, fallback = defaultAvatar) {
-  const avatarUrl = String(value || fallback || defaultAvatar).trim()
-  return /^(data|blob):/i.test(avatarUrl) ? defaultAvatar : avatarUrl
+  return firestoreService.getPersistableAvatarUrl(value, fallback)
 }
 
 function getPublicProfileSummary(profile = {}, userId = '') {

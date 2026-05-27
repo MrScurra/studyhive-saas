@@ -173,10 +173,36 @@ const buildStudyCircleSearchFields = (circle = {}) => ({
 });
 
 const DEFAULT_AVATAR_URL = './frontend/assets/profile-picture/default-profile-picture.webp';
+const PRODUCTION_PROFILE_AVATAR_BASE_URL = 'https://studyhive-saas.onrender.com/api/profile/avatar/';
+const PROFILE_AVATAR_PATH = '/api/profile/avatar/';
+
+const normalizeProfileAvatarUrl = (value) => {
+  const avatarUrl = String(value || '').trim();
+
+  if (!avatarUrl) {
+    return avatarUrl;
+  }
+
+  try {
+    const parsedUrl = new URL(avatarUrl);
+    const isLocalApi = (parsedUrl.hostname === 'localhost' || parsedUrl.hostname === '127.0.0.1')
+      && parsedUrl.port === '5000'
+      && parsedUrl.pathname.startsWith(PROFILE_AVATAR_PATH);
+
+    if (isLocalApi) {
+      const filename = parsedUrl.pathname.slice(PROFILE_AVATAR_PATH.length);
+      return `${PRODUCTION_PROFILE_AVATAR_BASE_URL}${filename}${parsedUrl.search}`;
+    }
+  } catch (error) {
+    return avatarUrl;
+  }
+
+  return avatarUrl;
+};
 
 const getPersistableAvatarUrl = (value, fallback = DEFAULT_AVATAR_URL) => {
   const avatarUrl = String(value || fallback || DEFAULT_AVATAR_URL).trim();
-  return /^(data|blob):/i.test(avatarUrl) ? DEFAULT_AVATAR_URL : avatarUrl;
+  return /^(data|blob):/i.test(avatarUrl) ? DEFAULT_AVATAR_URL : normalizeProfileAvatarUrl(avatarUrl);
 };
 
 const getTimestampMillis = (value) => {
@@ -511,13 +537,16 @@ const getUserProfile = async (userId) => {
   const data = doc.data();
   const fullName = data.fullName || data.realName || data.name || data.displayName || 'StudyHive User';
   const displayName = data.displayName || data.nickname || fullName;
+  const avatarUrl = getPersistableAvatarUrl(data.avatarUrl || data.avatar);
 
   return {
     ...data,
     id: doc.id,
     uid: data.uid || doc.id,
     displayName,
-    fullName
+    fullName,
+    avatarUrl,
+    avatar: getPersistableAvatarUrl(data.avatar || avatarUrl)
   };
 };
 
@@ -2304,6 +2333,7 @@ module.exports = {
   initializeFirestore,
   getFirestore,
   isQuotaError,
+  getPersistableAvatarUrl,
   // Posts
   savePosts,
   savePost,

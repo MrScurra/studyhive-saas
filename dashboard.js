@@ -7,6 +7,8 @@ const DEFAULT_CATEGORY_OPTIONS = [
 ];
 const DEFAULT_CIRCLE_AVATAR = '👥';
 const DEFAULT_PROFILE_AVATAR = './frontend/assets/profile-picture/default-profile-picture.webp';
+const PRODUCTION_PROFILE_AVATAR_BASE_URL = 'https://studyhive-saas.onrender.com/api/profile/avatar/';
+const PROFILE_AVATAR_PATH = '/api/profile/avatar/';
 const ACTIVE_FRIEND_WINDOW_MS = 5 * 60 * 1000;
 const ACTIVE_FRIEND_REFRESH_MS = 60 * 1000;
 const ENABLE_PRESENCE = false;
@@ -778,7 +780,7 @@ async function applyAuthProviderSettings(user = firebaseAuth?.currentUser) {
 function saveUserSession(user) {
     const previousUserId = localStorage.getItem('userId');
     const displayName = getDisplayName(user, localStorage.getItem('userName') || '');
-    const avatar = user.photoURL || localStorage.getItem('userAvatar') || './frontend/assets/profile-picture/default-profile-picture.webp';
+    const avatar = normalizeProfileAvatarSource(user.photoURL || localStorage.getItem('userAvatar') || DEFAULT_PROFILE_AVATAR);
     const providerIds = getProviderIds(user);
 
     if (previousUserId && previousUserId !== user.uid) {
@@ -819,7 +821,7 @@ function updateHeaderFromCurrentUser() {
     }
 
     if (headerAvatar) {
-        headerAvatar.src = currentUser.avatar;
+        headerAvatar.src = normalizeProfileAvatarSource(currentUser.avatar);
         headerAvatar.alt = currentUser.name;
     }
 }
@@ -828,8 +830,30 @@ function isInlineImageSource(source) {
     return /^(data|blob):/i.test(String(source || ''));
 }
 
-function getPersistableAvatarSource(source) {
+function normalizeProfileAvatarSource(source) {
     const avatarSource = String(source || '').trim();
+
+    if (!avatarSource) return avatarSource;
+
+    try {
+        const parsedUrl = new URL(avatarSource, window.location.href);
+        const isLocalApi = (parsedUrl.hostname === 'localhost' || parsedUrl.hostname === '127.0.0.1')
+            && parsedUrl.port === '5000'
+            && parsedUrl.pathname.startsWith(PROFILE_AVATAR_PATH);
+
+        if (isLocalApi) {
+            const filename = parsedUrl.pathname.slice(PROFILE_AVATAR_PATH.length);
+            return `${PRODUCTION_PROFILE_AVATAR_BASE_URL}${filename}${parsedUrl.search}`;
+        }
+    } catch (error) {
+        return avatarSource;
+    }
+
+    return avatarSource;
+}
+
+function getPersistableAvatarSource(source) {
+    const avatarSource = normalizeProfileAvatarSource(source);
     return isInlineImageSource(avatarSource) ? '' : avatarSource;
 }
 
@@ -864,13 +888,13 @@ function normalizeAuthorProfile(profile = {}, fallback = {}) {
         || ''
     ).trim();
     const fullName = String(profile.fullName || profile.realName || fallback.fullName || displayName || '').trim();
-    const avatarUrl = String(
+    const avatarUrl = normalizeProfileAvatarSource(
         profile.avatarUrl
         || profile.avatar
         || fallback.avatarUrl
         || fallback.avatar
         || DEFAULT_PROFILE_AVATAR
-    ).trim();
+    );
 
     return {
         id: String(profile.id || profile.uid || fallback.id || '').trim(),
@@ -1835,6 +1859,7 @@ function getShortDisplayName(fullName) {
 function updateProfileHeader(data) {
     const fullName = data.fullName || 'StudyHive User';
     const displayName = data.displayName || fullName;
+    const avatar = normalizeProfileAvatarSource(data.avatar || DEFAULT_PROFILE_AVATAR);
     const username = data.username ? `@${data.username}` : '';
     const profileMetaParts = [
         username,
@@ -1844,16 +1869,16 @@ function updateProfileHeader(data) {
     ].filter(Boolean);
 
     currentUser.name = displayName;
-    currentUser.avatar = data.avatar;
+    currentUser.avatar = avatar;
 
     headerUserName.textContent = currentUser.name;
-    headerAvatar.src = data.avatar;
+    headerAvatar.src = avatar;
     headerAvatar.alt = `${displayName} avatar`;
-    if (avatarPreviewObjectUrl && data.avatar !== avatarPreviewObjectUrl) {
+    if (avatarPreviewObjectUrl && avatar !== avatarPreviewObjectUrl) {
         URL.revokeObjectURL(avatarPreviewObjectUrl);
         avatarPreviewObjectUrl = '';
     }
-    profileAvatarPreview.src = data.avatar;
+    profileAvatarPreview.src = avatar;
     profileAvatarPreview.alt = `${displayName} profile photo`;
     profileHeadingName.textContent = displayName;
     profileHeadingMeta.textContent = profileMetaParts.join(' • ');
@@ -1872,7 +1897,7 @@ function getProfileDataFromBackend(profile) {
         school: profile.school || savedProfileData.school,
         course: profile.course || savedProfileData.course,
         yearLevel: profile.yearLevel || savedProfileData.yearLevel,
-        avatar: profile.avatarUrl || savedProfileData.avatar,
+        avatar: normalizeProfileAvatarSource(profile.avatarUrl || profile.avatar || savedProfileData.avatar),
         skills: Array.isArray(profile.skills) ? profile.skills : [...savedProfileData.skills]
     };
 }
@@ -2083,12 +2108,12 @@ function initProfileEditor() {
                 // Update local storage tracking vars safely with the server's returned ground-truth values
                 localStorage.setItem('userFullName', data.profile.fullName || savedProfile.fullName);
                 localStorage.setItem('userName', data.profile.displayName || savedProfile.displayName);
-                localStorage.setItem('userAvatar', data.profile.avatarUrl || savedProfile.avatar);
+                localStorage.setItem('userAvatar', savedProfile.avatar);
                 if (window.PostInteractions && typeof window.PostInteractions.setUserInfo === 'function') {
                     window.PostInteractions.setUserInfo(
                         getCurrentUserId(),
                         data.profile.displayName || savedProfile.displayName,
-                        data.profile.avatarUrl || savedProfile.avatar,
+                        savedProfile.avatar,
                         localStorage.getItem('userEmail') || ''
                     );
                 }
@@ -2999,7 +3024,7 @@ function syncFriendConversations() {
 function createFriendAvatar(src, name) {
     const avatar = document.createElement('img');
     avatar.className = 'friend-avatar';
-    avatar.src = src || './frontend/assets/profile-picture/default-profile-picture.webp';
+    avatar.src = normalizeProfileAvatarSource(src || DEFAULT_PROFILE_AVATAR);
     avatar.alt = name || 'StudyHive friend';
     return avatar;
 }
@@ -3598,17 +3623,17 @@ function getConversationFriend(conversation = {}) {
 
 function getMessageAvatarSource(message = {}, conversation = {}, isOwn = false) {
     if (isOwn) {
-        return message.avatar
+        return normalizeProfileAvatarSource(message.avatar
             || localStorage.getItem('userAvatar')
             || currentUser.avatar
-            || './frontend/assets/profile-picture/default-profile-picture.webp';
+            || DEFAULT_PROFILE_AVATAR);
     }
 
     const friend = getConversationFriend(conversation);
-    return message.avatar
+    return normalizeProfileAvatarSource(message.avatar
         || friend?.avatarUrl
         || conversation.avatarUrl
-        || './frontend/assets/profile-picture/default-profile-picture.webp';
+        || DEFAULT_PROFILE_AVATAR);
 }
 
 function getAvatarColor(value = '') {
@@ -3621,7 +3646,7 @@ function createMessageAvatarElement(author, avatarSrc) {
     if (avatarSrc && isImageSearchAvatar(avatarSrc)) {
         const avatar = document.createElement('img');
         avatar.className = 'message-avatar';
-        avatar.src = avatarSrc;
+        avatar.src = normalizeProfileAvatarSource(avatarSrc);
         avatar.alt = `${author} avatar`;
         avatar.addEventListener('error', () => {
             const fallback = createTextElement('div', 'message-avatar', getInitials(author));
@@ -3693,7 +3718,7 @@ function renderConversationList() {
         if (conversation.avatarUrl) {
             const avatarImage = document.createElement('img');
             avatarImage.className = 'conversation-avatar-img';
-            avatarImage.src = conversation.avatarUrl;
+            avatarImage.src = normalizeProfileAvatarSource(conversation.avatarUrl);
             avatarImage.alt = `${conversation.name}'s avatar`;
             avatarImage.addEventListener('error', () => {
                 avatar.classList.remove('has-image');
@@ -4730,7 +4755,7 @@ function createSearchResultMedia(result, fallbackIcon) {
     if (isImageSearchAvatar(value)) {
         const image = document.createElement('img');
         image.className = 'search-result-avatar';
-        image.src = value;
+        image.src = normalizeProfileAvatarSource(value);
         image.alt = result.title || 'Search result';
         return image;
     }
@@ -4966,7 +4991,7 @@ async function openSearchUserResult(result) {
         title: result.title || result.name || 'StudyHive User',
         subtitle: result.subtitle || result.username || 'StudyHive member',
         description: result.description || '',
-        avatar: result.avatar || './frontend/assets/profile-picture/default-profile-picture.webp'
+        avatar: normalizeProfileAvatarSource(result.avatar || DEFAULT_PROFILE_AVATAR)
     };
 
     searchProfileAvatar.src = activeSearchProfileUser.avatar;
@@ -5759,7 +5784,7 @@ function renderNotificationItem(notification) {
 
     const avatar = document.createElement('img');
     avatar.className = 'notification-avatar';
-    avatar.src = notification.avatar || './frontend/assets/profile-picture/default-profile-picture.webp';
+    avatar.src = normalizeProfileAvatarSource(notification.avatar || DEFAULT_PROFILE_AVATAR);
     avatar.alt = notification.fromUser || 'User';
 
     const content = document.createElement('div');

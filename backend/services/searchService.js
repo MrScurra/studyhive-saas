@@ -3,6 +3,7 @@ const defaultStudyCircles = require('../data/studyCirclesStore')
 
 const DEFAULT_LIMIT = 6
 const FALLBACK_LIMIT = 24
+const DEFAULT_AVATAR_URL = './frontend/assets/profile-picture/default-profile-picture.webp'
 let defaultCirclesSeedChecked = false
 
 function normalizeSearchText(value) {
@@ -190,7 +191,7 @@ async function searchPosts(query, limit = DEFAULT_LIMIT) {
       title: truncateText(post.title || post.text || post.content || 'Untitled post', 82),
       subtitle: `Posted in ${post.category || post.studyCircle || 'General'}${post.userName ? ` by ${post.userName}` : ''}`,
       description: truncateText(post.content || post.text || ''),
-      avatar: post.avatar || './frontend/assets/profile-picture/default-profile-picture.webp',
+      avatar: firestoreService.getPersistableAvatarUrl(post.avatar, DEFAULT_AVATAR_URL),
       postId: id,
       category: post.category || post.studyCircle || 'General'
     })
@@ -227,7 +228,7 @@ async function searchUsers(query, limit = DEFAULT_LIMIT) {
         title: user.displayName || user.fullName || user.name || user.username || 'StudyHive User',
         subtitle: subtitleParts.join(' • ') || 'StudyHive member',
         description: truncateText(user.bio || ''),
-        avatar: user.avatarUrl || user.avatar || './frontend/assets/profile-picture/default-profile-picture.webp',
+        avatar: firestoreService.getPersistableAvatarUrl(user.avatarUrl || user.avatar, DEFAULT_AVATAR_URL),
         username: user.username || '',
         email: user.email || '',
         updatedAt: user.updatedAt || user.createdAt || null
