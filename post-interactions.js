@@ -240,9 +240,27 @@ const PostInteractions = (() => {
   // BOOKMARK FUNCTIONALITY
   // ========================================
 
+  const isBookmarkButton = (button) => {
+    return button && button.classList.contains('action-stat') && button.textContent.includes('Bookmark')
+  }
+
+  const syncBookmarkState = (postId, data = {}) => {
+    if (!postId) return
+
+    document.querySelectorAll('.post').forEach((postElement) => {
+      if (String(postElement.dataset.postId) !== String(postId)) return
+
+      postElement.querySelectorAll('.action-stat').forEach((button) => {
+        if (isBookmarkButton(button)) {
+          updateBookmarkUI(button, data)
+        }
+      })
+    })
+  }
+
   const initBookmarkButtons = () => {
     document.querySelectorAll('.post .action-stat').forEach((btn) => {
-      if (btn.textContent.includes('🔖')) {
+      if (isBookmarkButton(btn)) {
         if (btn.dataset.bookmarkReady === 'true') return
 
         btn.dataset.bookmarkReady = 'true'
@@ -305,6 +323,13 @@ const PostInteractions = (() => {
 
       const data = await response.json();
       updateBookmarkUI(button, data);
+      window.dispatchEvent(new CustomEvent('studyhive:bookmarkchange', {
+        detail: {
+          postId,
+          bookmarked: Boolean(data.bookmarked),
+          count: data.count
+        }
+      }));
     } catch (error) {
       console.error('Bookmark failed:', error);
     } finally {
@@ -323,6 +348,8 @@ const PostInteractions = (() => {
       button.classList.remove('active');
       button.style.color = 'inherit';
     }
+
+    button.setAttribute('aria-pressed', String(Boolean(data.bookmarked)));
   };
 
   // ========================================
@@ -586,6 +613,7 @@ const PostInteractions = (() => {
     getUpvotes: () => getStorage(STORAGE_KEYS.upvotes),
     getBookmarks: () => getStorage(STORAGE_KEYS.bookmarks),
     getComments: () => getStorage(STORAGE_KEYS.comments),
+    syncBookmarkState,
     clearAll: () => {
       localStorage.removeItem(STORAGE_KEYS.upvotes)
       localStorage.removeItem(STORAGE_KEYS.bookmarks)

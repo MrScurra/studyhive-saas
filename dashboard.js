@@ -1774,6 +1774,61 @@ async function loadPosts() {
     }
 }
 
+function updateRenderedBookmarkButton(postId, bookmarked) {
+    document.querySelectorAll('.post').forEach((postElement) => {
+        if (String(postElement.dataset.postId) !== String(postId)) return;
+
+        const bookmarkButton = Array.from(postElement.querySelectorAll('.action-stat'))
+            .find((button) => button.textContent.includes('Bookmark'));
+
+        if (!bookmarkButton) return;
+
+        bookmarkButton.dataset.statusLoaded = 'true';
+        bookmarkButton.dataset.bookmarked = String(Boolean(bookmarked));
+        bookmarkButton.classList.toggle('active', Boolean(bookmarked));
+        bookmarkButton.setAttribute('aria-pressed', String(Boolean(bookmarked)));
+        bookmarkButton.style.color = bookmarked ? 'var(--primary-yellow)' : 'inherit';
+    });
+}
+
+function syncPostBookmarkState(postId, { bookmarked = false, count } = {}) {
+    if (!postId) return;
+
+    const nextBookmarked = Boolean(bookmarked);
+    loadedPosts = loadedPosts.map((post) => {
+        if (String(post.id) !== String(postId)) return post;
+
+        return {
+            ...post,
+            bookmarked: nextBookmarked,
+            bookmarks: count !== undefined && count !== null && Number.isFinite(Number(count)) ? Number(count) : post.bookmarks
+        };
+    });
+
+    if (window.PostInteractions && typeof window.PostInteractions.syncBookmarkState === 'function') {
+        window.PostInteractions.syncBookmarkState(postId, { bookmarked: nextBookmarked, count });
+        return;
+    }
+
+    updateRenderedBookmarkButton(postId, nextBookmarked);
+}
+
+function syncPostBookmarkStatesFromPosts(posts = []) {
+    posts.forEach((post) => {
+        if (!post?.id || typeof post.bookmarked !== 'boolean') return;
+
+        syncPostBookmarkState(post.id, {
+            bookmarked: post.bookmarked,
+            count: post.bookmarks
+        });
+    });
+}
+
+window.addEventListener('studyhive:bookmarkchange', (event) => {
+    const detail = event.detail || {};
+    syncPostBookmarkState(detail.postId, detail);
+});
+
 async function uploadPostFile(file) {
     const formData = new FormData();
     formData.append('file', file);
@@ -2934,6 +2989,7 @@ async function loadBookmarkedPosts() {
 
         const data = await response.json();
         const posts = data.posts || [];
+        syncPostBookmarkStatesFromPosts(posts);
         const bookmarkedPosts = posts.filter(post => post.bookmarked === true);
         renderBookmarkedPosts(await hydratePostsWithAuthorProfiles(bookmarkedPosts));
     } catch (error) {
@@ -3007,11 +3063,20 @@ async function handleRemoveBookmarkFromSaved(postId, itemElement) {
                 ...getAuthHeaders()
             }
         });
+        const data = await response.json().catch(() => ({}));
 
         if (!response.ok) {
-            throw new Error('Could not remove bookmark');
+            throw new Error(data.error || 'Could not remove bookmark');
         }
 
+        if (data.bookmarked !== false) {
+            throw new Error('Bookmark was not removed');
+        }
+
+        syncPostBookmarkState(postId, {
+            bookmarked: false,
+            count: data.count
+        });
         itemElement.remove();
         const bookmarkedItemsList = document.getElementById('bookmarkedItemsList');
         const savedEmptyState = document.getElementById('savedEmptyState');
@@ -3021,11 +3086,6 @@ async function handleRemoveBookmarkFromSaved(postId, itemElement) {
         }
 
         showToast('Bookmark removed');
-
-        // Trigger refresh of post interactions to sync Feed
-        if (window.PostInteractions && typeof window.PostInteractions.init === 'function') {
-            window.PostInteractions.init();
-        }
     } catch (error) {
         console.error('Remove bookmark failed:', error);
         showToast('Could not remove bookmark');
