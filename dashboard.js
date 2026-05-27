@@ -2846,46 +2846,6 @@ function initPostComposer() {
     publishPostBtn.addEventListener('click', publishPost);
 }
 
-// Mock conversation data
-const mockConversations = [
-    {
-        id: 1,
-        name: 'Biology 101',
-        avatar: '👥',
-        preview: 'Ryan: Let\'s review lesson 2...',
-        members: ['Ryan', 'Larry Lim', 'Charisse Garcia'],
-        memberUserIds: ['seed-user-ryan', 'seed-user-larry', 'seed-user-charisse'],
-        messages: [
-            { id: 1, author: 'Ryan', time: '9:30 AM', text: 'Good morning Everyone, has anyone compiled the overview for the lesson 2' },
-            { id: 2, author: 'Charisse Garcia', time: '9:35 AM', text: 'Good morning! Yes, I did. I just published it to the group a couple hours ago.' },
-            { id: 3, author: 'Ryan', time: '10:00 AM', text: 'Let\'s review lesson 2 then after let\'s practice it by answering some questions I\'ll make.' }
-        ]
-    },
-    {
-        id: 2,
-        name: 'Calculus',
-        avatar: '📊',
-        preview: 'Emma: Can you explain derivatives?',
-        members: ['Emma', 'John', 'Sarah'],
-        memberUserIds: ['seed-user-emma', 'seed-user-john', 'seed-user-sarah'],
-        messages: [
-            { id: 1, author: 'Emma', time: '8:00 AM', text: 'Can you explain derivatives?' },
-            { id: 2, author: 'John', time: '8:15 AM', text: 'Sure! Derivatives measure the rate of change...' }
-        ]
-    },
-    {
-        id: 3,
-        name: 'Understanding the self',
-        avatar: '🧠',
-        preview: 'Prof. Smith: Next session is Thursday',
-        members: ['Prof. Smith', 'Alex', 'Jordan'],
-        memberUserIds: ['seed-user-prof-smith', 'seed-user-alex', 'seed-user-jordan'],
-        messages: [
-            { id: 1, author: 'Prof. Smith', time: '2:00 PM', text: 'Next session is Thursday at 3 PM' }
-        ]
-    }
-];
-
 async function loadBookmarkedPosts() {
     try {
         const response = await fetch(`${API_BASE_URL}/posts`, {
@@ -3003,11 +2963,6 @@ function populateSavedSection() {
 let selectedConversationId = null;
 let conversationMessages = {};
 let inboxConversations = [];
-
-// Initialize conversation messages storage
-mockConversations.forEach((conv) => {
-    conversationMessages[conv.id] = [...conv.messages];
-});
 
 function getVisibleConversations() {
     return inboxConversations;

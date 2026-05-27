@@ -1,4 +1,3 @@
-const messages = require('../data/messagesStore')
 const firestoreService = require('../services/firestoreService')
 
 function createMessageId() {
@@ -51,13 +50,6 @@ function getStudyCircleMemberIds(circle = {}) {
   return uniqueUserIds(Array.isArray(circle.memberIds) ? circle.memberIds : [])
 }
 
-function isMessageVisibleToUser(message = {}, userId = '') {
-  const currentUserId = normalizeUserId(userId)
-  const participantIds = uniqueUserIds(message.participantIds || [])
-
-  return Boolean(currentUserId && participantIds.includes(currentUserId))
-}
-
 function addRecipientId(value, recipientIds) {
   if (!value) return
 
@@ -95,51 +87,18 @@ function getMessageRecipientIds(body, senderId) {
   return [...recipientIds]
 }
 
-function getTimestampMillis(value) {
-  if (!value) return 0
-  if (typeof value.toMillis === 'function') return value.toMillis()
-  if (typeof value.seconds === 'number') return value.seconds * 1000
-  if (typeof value._seconds === 'number') return value._seconds * 1000
-
-  const parsed = new Date(value).getTime()
-  return Number.isNaN(parsed) ? 0 : parsed
-}
-
-function mergeMessages(...messageLists) {
-  const messagesById = new Map()
-
-  messageLists.flat().forEach((message) => {
-    if (!message?.id) return
-    messagesById.set(String(message.id), message)
-  })
-
-  return [...messagesById.values()].sort((a, b) => {
-    return getTimestampMillis(a.createdAt || a.timestamp) - getTimestampMillis(b.createdAt || b.timestamp)
-  })
-}
-
 async function getMessages(req, res, next) {
   try {
     const conversationId = normalizeConversationId(req.query.conversationId)
     const firestoreMessages = await firestoreService.getMessagesForUser(req.user.id, conversationId)
-    const memoryMessages = conversationId
-      ? messages.filter((message) => message.conversationId === conversationId)
-      : messages
-    const visibleMemoryMessages = memoryMessages.filter((message) => isMessageVisibleToUser(message, req.user.id))
 
-    return res.json({ messages: mergeMessages(visibleMemoryMessages, firestoreMessages) })
+    return res.json({ messages: firestoreMessages })
   } catch (error) {
     if (firestoreService.isQuotaError(error)) {
-      const conversationId = normalizeConversationId(req.query.conversationId)
-      const memoryMessages = conversationId
-        ? messages.filter((message) => message.conversationId === conversationId)
-        : messages
-      const visibleMemoryMessages = memoryMessages.filter((message) => isMessageVisibleToUser(message, req.user.id))
-
       return res.json({
-        messages: mergeMessages(visibleMemoryMessages),
+        messages: [],
         degraded: true,
-        warning: 'Firestore quota exceeded; showing locally cached messages only.'
+        warning: 'Firestore quota exceeded; messages are temporarily unavailable.'
       })
     }
 
@@ -225,7 +184,6 @@ async function createMessage(req, res, next) {
       message.circleName = circleName
     }
 
-    messages.push(message)
     await firestoreService.saveMessage(message)
 
     await Promise.all(recipientIds.map((recipientId) => firestoreService.createNotification(recipientId, {
