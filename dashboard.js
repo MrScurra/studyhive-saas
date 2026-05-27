@@ -243,6 +243,7 @@ let pendingInvitations = [];
 let selectedCircleMembers = [];
 let acceptedFriends = [];
 let loadedPosts = [];
+let postAuthorProfileCache = new Map();
 let userPresenceById = new Map();
 let activeFriendsFromPresence = [];
 let activeFriendsPresenceLoadedAt = 0;
@@ -783,6 +784,7 @@ function saveUserSession(user) {
     if (previousUserId && previousUserId !== user.uid) {
         stopRealtimeListeners();
         resetFriendState();
+        postAuthorProfileCache.clear();
     }
 
     if (previousUserId !== user.uid || !localStorage.getItem('studyhive-session-started-at')) {
@@ -798,6 +800,11 @@ function saveUserSession(user) {
 
     currentUser.name = displayName;
     currentUser.avatar = avatar;
+    cacheCurrentUserAuthorProfile({
+        displayName,
+        fullName: displayName,
+        avatarUrl: avatar
+    });
 
     if (window.PostInteractions && typeof window.PostInteractions.setUserInfo === 'function') {
         window.PostInteractions.setUserInfo(user.uid, displayName, avatar, user.email);
@@ -835,6 +842,205 @@ function getAuthHeaders() {
         'x-user-avatar': getPersistableAvatarSource(avatarSource) || DEFAULT_PROFILE_AVATAR,
         'x-user-email': localStorage.getItem('userEmail') || ''
     };
+}
+
+function getPostAuthorUserId(post = {}) {
+    return String(post.userId || post.ownerId || post.createdById || post.uid || '').trim();
+}
+
+function isProfileCachePromise(value) {
+    return value && typeof value.then === 'function';
+}
+
+function normalizeAuthorProfile(profile = {}, fallback = {}) {
+    const displayName = String(
+        profile.displayName
+        || profile.nickname
+        || profile.fullName
+        || profile.realName
+        || profile.name
+        || fallback.displayName
+        || fallback.name
+        || ''
+    ).trim();
+    const fullName = String(profile.fullName || profile.realName || fallback.fullName || displayName || '').trim();
+    const avatarUrl = String(
+        profile.avatarUrl
+        || profile.avatar
+        || fallback.avatarUrl
+        || fallback.avatar
+        || DEFAULT_PROFILE_AVATAR
+    ).trim();
+
+    return {
+        id: String(profile.id || profile.uid || fallback.id || '').trim(),
+        uid: String(profile.uid || profile.id || fallback.uid || '').trim(),
+        displayName: displayName || fullName || 'StudyHive User',
+        fullName: fullName || displayName || 'StudyHive User',
+        avatarUrl: avatarUrl || DEFAULT_PROFILE_AVATAR
+    };
+}
+
+function cacheCurrentUserAuthorProfile(profile = {}) {
+    const userId = getCurrentUserId();
+
+    if (!userId) return null;
+
+    const cachedProfile = normalizeAuthorProfile({
+        ...profile,
+        id: userId,
+        uid: userId,
+        displayName: profile.displayName || localStorage.getItem('userName') || currentUser.name,
+        fullName: profile.fullName || localStorage.getItem('userFullName') || profile.displayName || currentUser.name,
+        avatarUrl: profile.avatarUrl || profile.avatar || localStorage.getItem('userAvatar') || currentUser.avatar
+    });
+
+    postAuthorProfileCache.set(userId, cachedProfile);
+    return cachedProfile;
+}
+
+function getCachedPostAuthorProfile(userId) {
+    const cachedProfile = postAuthorProfileCache.get(String(userId || '').trim());
+    return isProfileCachePromise(cachedProfile) ? null : cachedProfile;
+}
+
+function getFallbackPostAuthor(post = {}) {
+    return {
+        name: String(
+            post.authorName
+            || post.userName
+            || post.author
+            || post.createdBy
+            || currentUser.name
+            || 'StudyHive User'
+        ).trim(),
+        avatar: String(
+            post.authorAvatar
+            || post.avatar
+            || post.avatarUrl
+            || currentUser.avatar
+            || DEFAULT_PROFILE_AVATAR
+        ).trim()
+    };
+}
+
+function getPostAuthorDisplay(post = {}) {
+    const profile = getCachedPostAuthorProfile(getPostAuthorUserId(post));
+    const fallback = getFallbackPostAuthor(post);
+
+    return {
+        name: profile?.displayName || profile?.fullName || fallback.name || 'StudyHive User',
+        avatar: profile?.avatarUrl || profile?.avatar || fallback.avatar || DEFAULT_PROFILE_AVATAR
+    };
+}
+
+function shouldFetchPostAuthorProfile(post = {}) {
+    const userId = getPostAuthorUserId(post);
+    return Boolean(userId) && !post.degraded && !userId.startsWith('seed-user-');
+}
+
+async function fetchPostAuthorProfile(post = {}) {
+    const userId = getPostAuthorUserId(post);
+
+    if (!userId) return null;
+
+    const cachedProfile = postAuthorProfileCache.get(userId);
+    if (cachedProfile !== undefined) {
+        return cachedProfile;
+    }
+
+    if (userId === getCurrentUserId()) {
+        return cacheCurrentUserAuthorProfile();
+    }
+
+    if (!shouldFetchPostAuthorProfile(post)) {
+        postAuthorProfileCache.set(userId, null);
+        return null;
+    }
+
+    const request = fetch(`${API_BASE_URL}/profile/${encodeURIComponent(userId)}`, {
+        headers: getAuthHeaders()
+    })
+        .then(async (response) => {
+            if (response.status === 404) return null;
+
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || !data.profile) return null;
+
+            return normalizeAuthorProfile(data.profile, { id: userId, uid: userId });
+        })
+        .catch(() => null);
+
+    postAuthorProfileCache.set(userId, request);
+    const profile = await request;
+    postAuthorProfileCache.set(userId, profile);
+    return profile;
+}
+
+function applyPostAuthorProfile(post = {}) {
+    const author = getPostAuthorDisplay(post);
+
+    return {
+        ...post,
+        displayUserName: author.name,
+        displayAvatar: author.avatar
+    };
+}
+
+async function hydratePostsWithAuthorProfiles(posts = []) {
+    const postList = Array.isArray(posts) ? posts : [];
+    const profileRequests = new Map();
+
+    postList.forEach((post) => {
+        const userId = getPostAuthorUserId(post);
+
+        if (userId && !profileRequests.has(userId) && shouldFetchPostAuthorProfile(post)) {
+            profileRequests.set(userId, fetchPostAuthorProfile(post));
+        }
+    });
+
+    await Promise.all(profileRequests.values());
+    return postList.map(applyPostAuthorProfile);
+}
+
+function updateRenderedPostAuthorProfile(userId) {
+    const profile = getCachedPostAuthorProfile(userId);
+
+    if (!profile) return;
+
+    const displayName = profile.displayName || profile.fullName || 'StudyHive User';
+    const avatarUrl = profile.avatarUrl || DEFAULT_PROFILE_AVATAR;
+
+    loadedPosts = loadedPosts.map((post) => {
+        if (getPostAuthorUserId(post) !== String(userId)) return post;
+        return applyPostAuthorProfile(post);
+    });
+
+    document.querySelectorAll('.post').forEach((postElement) => {
+        if (postElement.dataset.ownerId !== String(userId)) return;
+
+        const nameElement = postElement.querySelector('.post-user-name');
+        const avatarElement = postElement.querySelector('.post-avatar');
+
+        if (nameElement) nameElement.textContent = displayName;
+        if (avatarElement) {
+            avatarElement.src = avatarUrl;
+            avatarElement.alt = displayName;
+        }
+    });
+
+    document.querySelectorAll('.bookmarked-item').forEach((itemElement) => {
+        if (itemElement.dataset.ownerId !== String(userId)) return;
+
+        const nameElement = itemElement.querySelector('.bookmarked-item-title');
+        const avatarElement = itemElement.querySelector('.post-avatar');
+
+        if (nameElement) nameElement.textContent = displayName;
+        if (avatarElement) {
+            avatarElement.src = avatarUrl;
+            avatarElement.alt = displayName;
+        }
+    });
 }
 
 async function getFirebaseAccountActionHeaders() {
@@ -1115,8 +1321,6 @@ function createPostCard(post) {
         id,
         content,
         category = 'General',
-        userName = currentUser.name,
-        avatar: avatarUrl = currentUser.avatar,
         timestamp = 'Just now',
         upvotes = 0,
         comments = 0,
@@ -1125,7 +1329,8 @@ function createPostCard(post) {
         bookmarked = false,
         isOwner = false
     } = post;
-    const ownerId = String(post.userId || post.ownerId || post.createdById || '');
+    const ownerId = getPostAuthorUserId(post);
+    const { name: userName, avatar: avatarUrl } = getPostAuthorDisplay(post);
 
     const article = document.createElement('article');
     article.className = 'post';
@@ -1466,8 +1671,8 @@ async function deletePostRequest(postId) {
     }
 }
 
-function renderPosts(posts) {
-    loadedPosts = Array.isArray(posts) ? [...posts] : [];
+async function renderPosts(posts) {
+    loadedPosts = await hydratePostsWithAuthorProfiles(posts);
     feed.innerHTML = '';
     loadedPosts.forEach((post) => {
         feed.appendChild(createPostCard(post));
@@ -1487,7 +1692,7 @@ async function loadPosts() {
         }
 
         const data = await response.json();
-        renderPosts(data.posts || []);
+        await renderPosts(data.posts || []);
     } catch (error) {
         console.error('Loading posts failed:', error);
         refreshPostInteractions();
@@ -1549,12 +1754,14 @@ async function publishPost() {
             throw new Error(data.error || 'Could not publish post');
         }
 
+        const [hydratedPost] = await hydratePostsWithAuthorProfiles([data.post]);
+
         loadedPosts = [
-            data.post,
-            ...loadedPosts.filter(post => String(post.id) !== String(data.post?.id))
+            hydratedPost,
+            ...loadedPosts.filter(post => String(post.id) !== String(hydratedPost?.id))
         ].filter(Boolean);
         updateProfileStats();
-        feed.prepend(createPostCard(data.post));
+        feed.prepend(createPostCard(hydratedPost));
         refreshPostInteractions();
         resetPostForm();
         showToast('Post published successfully');
@@ -1881,6 +2088,12 @@ function initProfileEditor() {
                 // Keep your app memory objects in sync
                 savedProfileData = savedProfile;
                 applyProfileFormData(savedProfileData);
+                cacheCurrentUserAuthorProfile({
+                    displayName: savedProfileData.displayName,
+                    fullName: savedProfileData.fullName,
+                    avatarUrl: savedProfileData.avatar
+                });
+                updateRenderedPostAuthorProfile(getCurrentUserId());
 
                 // Re-render user components, header states, and badges seamlessly
                 avatarUpload.value = '';
@@ -2686,7 +2899,7 @@ async function loadBookmarkedPosts() {
         const data = await response.json();
         const posts = data.posts || [];
         const bookmarkedPosts = posts.filter(post => post.bookmarked === true);
-        renderBookmarkedPosts(bookmarkedPosts);
+        renderBookmarkedPosts(await hydratePostsWithAuthorProfiles(bookmarkedPosts));
     } catch (error) {
         console.error('Loading bookmarked posts failed:', error);
         renderBookmarkedPosts([]);
@@ -2712,14 +2925,16 @@ function renderBookmarkedPosts(bookmarkedPosts) {
         const itemElement = document.createElement('div');
         itemElement.className = 'bookmarked-item';
         itemElement.dataset.postId = post.id;
+        itemElement.dataset.ownerId = getPostAuthorUserId(post);
 
         const attachmentHTML = createPostAttachmentMarkup(post);
+        const { name: userName, avatar: avatarUrl } = getPostAuthorDisplay(post);
 
         itemElement.innerHTML = `
             <div class="bookmarked-item-header">
-                <img src="${post.avatar}" alt="${post.userName}" class="post-avatar">
+                <img src="${avatarUrl}" alt="${userName}" class="post-avatar">
                 <div class="bookmarked-item-info">
-                    <div class="bookmarked-item-title">${post.userName}</div>
+                    <div class="bookmarked-item-title">${userName}</div>
                     <div class="bookmarked-item-meta">posted in <strong>${post.category}</strong></div>
                 </div>
             </div>
@@ -5321,6 +5536,7 @@ function showLogoutConfirmation(title, message) {
 
 function clearSessionAndRedirect() {
     stopRealtimeListeners();
+    postAuthorProfileCache.clear();
     if (typeof authGatekeeperUnsubscribe === 'function') {
         authGatekeeperUnsubscribe();
         authGatekeeperUnsubscribe = null;
@@ -5445,6 +5661,12 @@ async function loadUserProfileFromBackend() {
 
             // Reapply current profile variables straight into the form layouts and rendering pipelines
             applyProfileFormData(savedProfileData);
+            cacheCurrentUserAuthorProfile({
+                displayName: savedProfileData.displayName,
+                fullName: savedProfileData.fullName,
+                avatarUrl: savedProfileData.avatar
+            });
+            updateRenderedPostAuthorProfile(getCurrentUserId());
         }
     } catch (error) {
         console.error('Warning: Active connection to profile controller was dropped fallback onto static memory models:', error);

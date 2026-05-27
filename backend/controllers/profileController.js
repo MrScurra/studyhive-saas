@@ -22,6 +22,19 @@ function getPersistableAvatarUrl(value, fallback = defaultAvatar) {
   return /^(data|blob):/i.test(avatarUrl) ? defaultAvatar : avatarUrl
 }
 
+function getPublicProfileSummary(profile = {}, userId = '') {
+  const fullName = profile.fullName || profile.realName || profile.name || profile.displayName || 'StudyHive User'
+  const displayName = profile.displayName || profile.nickname || fullName
+
+  return {
+    id: profile.id || userId,
+    uid: profile.uid || profile.id || userId,
+    displayName,
+    fullName,
+    avatarUrl: getPersistableAvatarUrl(profile.avatarUrl || profile.avatar)
+  }
+}
+
 exports.getUserProfile = async (req, res) => {
   try {
     let profile = await firestoreService.getUserProfile(req.user.id)
@@ -59,6 +72,37 @@ exports.getUserProfile = async (req, res) => {
     }
 
     console.error('Failed to fetch profile info:', error)
+    return res.status(500).json({ error: 'Failed to fetch profile info' })
+  }
+}
+
+exports.getPublicUserProfile = async (req, res) => {
+  try {
+    const userId = String(req.params.userId || '').trim()
+
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' })
+    }
+
+    const profile = await firestoreService.getUserProfile(userId)
+
+    if (!profile) {
+      return res.status(404).json({ error: 'Profile not found' })
+    }
+
+    return res.status(200).json({
+      success: true,
+      profile: getPublicProfileSummary(profile, userId)
+    })
+  } catch (error) {
+    if (firestoreService.isQuotaError(error)) {
+      return res.status(503).json({
+        error: 'Firestore quota exceeded. Profile lookup is unavailable right now.',
+        code: 'firestore_quota_exceeded'
+      })
+    }
+
+    console.error('Failed to fetch public profile info:', error)
     return res.status(500).json({ error: 'Failed to fetch profile info' })
   }
 }

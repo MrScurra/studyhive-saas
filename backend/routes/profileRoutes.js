@@ -7,6 +7,7 @@ const router = express.Router()
 router.post('/avatar', upload.single('avatar'), profileController.uploadProfileAvatar)
 router.get('/avatar/:filename', profileController.getProfileAvatar)
 router.get('/', profileController.getUserProfile)
+router.get('/:userId', profileController.getPublicUserProfile)
 router.put('/', profileController.updateUserProfile)
 
 module.exports = router
