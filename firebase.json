@@ -27,6 +27,12 @@
         ]
       }
     ],
+    "rewrites": [
+  {
+    "source": "/",
+    "destination": "/Login.html"
+  }
+],
     "cleanUrls": true
   }
 }
