@@ -2955,6 +2955,7 @@ body.dark-mode .saved-title {
 
 body.dark-mode .bookmarked-item {
     background: #242424;
+    color: #e8e8e8;
 }
 
 .bookmarked-item-header {
@@ -2998,7 +2999,11 @@ body.dark-mode .bookmarked-item-title {
 }
 
 body.dark-mode .bookmarked-item-meta {
-    color: #999999;
+    color: #d0d0d0;
+}
+
+body.dark-mode .bookmarked-item-meta strong {
+    color: #ffffff;
 }
 
 .bookmarked-item-content {
@@ -3011,6 +3016,12 @@ body.dark-mode .bookmarked-item-meta {
     overflow-wrap: anywhere;
 }
 
+body.dark-mode .bookmarked-item-content,
+body.dark-mode .bookmarked-item-content .post-content,
+body.dark-mode .bookmarked-item .post-stats {
+    color: #e8e8e8;
+}
+
 .bookmarked-item .post-avatar {
     flex: 0 0 44px;
 }
@@ -3021,6 +3032,12 @@ body.dark-mode .bookmarked-item-meta {
     box-sizing: border-box;
 }
 
+body.dark-mode .bookmarked-item .post-attachment {
+    background-color: #1b1b1b;
+    border-color: #3a3a3a;
+    color: #e8e8e8;
+}
+
 .bookmarked-item .attachment-name {
     min-width: 0;
     overflow: hidden;
@@ -3028,9 +3045,17 @@ body.dark-mode .bookmarked-item-meta {
     white-space: nowrap;
 }
 
+body.dark-mode .bookmarked-item .attachment-name {
+    color: #f2f2f2;
+}
+
 .bookmarked-item .attachment-size {
     flex: 0 0 auto;
     white-space: nowrap;
+}
+
+body.dark-mode .bookmarked-item .attachment-size {
+    color: #cfcfcf;
 }
 
 .bookmarked-item-actions {
@@ -3094,7 +3119,7 @@ body.dark-mode .bookmark-remove-btn:hover {
 }
 
 body.dark-mode .saved-empty-state {
-    color: #666666;
+    color: #bdbdbd;
 }
 
 /* Inbox Section Styles */
