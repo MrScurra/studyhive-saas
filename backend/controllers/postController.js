@@ -1,5 +1,4 @@
 const firestoreService = require('../services/firestoreService')
-const fallbackPosts = require('../data/postsStore')
 const fs = require('fs')
 const path = require('path')
 const { uploadsDir } = require('../config/paths')
@@ -144,9 +143,9 @@ async function getPosts(req, res, next) {
   } catch (error) {
     if (firestoreService.isQuotaError(error)) {
       return res.json({
-        posts: fallbackPosts.map(post => getFallbackPostWithStats(post, req.userId)),
+        posts: [],
         degraded: true,
-        warning: 'Firestore quota exceeded; showing cached starter posts.'
+        warning: 'Firestore quota exceeded; feed is temporarily unavailable.'
       })
     }
 

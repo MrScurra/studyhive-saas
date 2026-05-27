@@ -1674,6 +1674,9 @@ async function deletePostRequest(postId) {
 async function renderPosts(posts) {
     loadedPosts = await hydratePostsWithAuthorProfiles(posts);
     feed.innerHTML = '';
+    if (loadedPosts.length === 0) {
+        feed.appendChild(createTextElement('p', 'friend-empty-state', 'No posts yet.'));
+    }
     loadedPosts.forEach((post) => {
         feed.appendChild(createPostCard(post));
     });
@@ -1683,6 +1686,9 @@ async function renderPosts(posts) {
 
 async function loadPosts() {
     try {
+        feed.innerHTML = '';
+        feed.appendChild(createTextElement('p', 'friend-empty-state', 'Loading posts...'));
+
         const response = await fetch(`${API_BASE_URL}/posts`, {
             headers: getAuthHeaders()
         });
@@ -1695,6 +1701,8 @@ async function loadPosts() {
         await renderPosts(data.posts || []);
     } catch (error) {
         console.error('Loading posts failed:', error);
+        feed.innerHTML = '';
+        feed.appendChild(createTextElement('p', 'friend-empty-state', 'Could not load posts right now.'));
         refreshPostInteractions();
     }
 }
