@@ -3886,7 +3886,7 @@ function renderMessageThread() {
 
     if (!selectedConversationId) {
         threadContent.hidden = true;
-        threadEmptyState.hidden = false;
+        threadEmptyState.hidden = true;
         return;
     }
 
