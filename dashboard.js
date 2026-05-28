@@ -13,6 +13,7 @@ const ACTIVE_FRIEND_WINDOW_MS = 5 * 60 * 1000;
 const ACTIVE_FRIEND_REFRESH_MS = 60 * 1000;
 const ENABLE_PRESENCE = false;
 const FRIENDS_CACHE_MS = 30 * 1000;
+const TimestampUtils = window.StudyHiveTimestamps;
 
 let firebaseAuth = null;
 let firebaseOnAuthStateChanged = null;
@@ -1388,7 +1389,6 @@ function createPostCard(post) {
         id,
         content,
         category = 'General',
-        timestamp = 'Just now',
         upvotes = 0,
         comments = 0,
         baseUpvotes = upvotes,
@@ -1398,6 +1398,7 @@ function createPostCard(post) {
     } = post;
     const ownerId = getPostAuthorUserId(post);
     const { name: userName, avatar: avatarUrl } = getPostAuthorDisplay(post);
+    const timestamp = TimestampUtils.formatRelativeTimestamp(post.createdAt || post.timestamp);
 
     const article = document.createElement('article');
     article.className = 'post';
@@ -3643,11 +3644,7 @@ function initFriendsPanel() {
 }
 
 function formatTime(date = new Date()) {
-    const hours = date.getHours();
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    const displayHours = hours % 12 || 12;
-    return `${displayHours}:${minutes} ${ampm}`;
+    return TimestampUtils.formatManilaTime(date);
 }
 
 function extractMessagesResponse(data) {
@@ -3662,14 +3659,12 @@ function getConversationMessages(conversationId) {
 
 function getMessageTimestampMillis(message = {}) {
     const value = message.createdAt || message.timestamp;
+    const millis = TimestampUtils.getTimestampMillis(value);
+    return Number.isNaN(millis) ? 0 : millis;
+}
 
-    if (!value) return 0;
-    if (typeof value.toMillis === 'function') return value.toMillis();
-    if (typeof value.seconds === 'number') return (value.seconds * 1000) + Math.floor((value.nanoseconds || 0) / 1000000);
-    if (typeof value._seconds === 'number') return (value._seconds * 1000) + Math.floor((value._nanoseconds || 0) / 1000000);
-
-    const parsed = new Date(value).getTime();
-    return Number.isNaN(parsed) ? 0 : parsed;
+function getMessageDisplayTime(message = {}) {
+    return TimestampUtils.formatManilaTime(message.createdAt || message.timestamp) || message.time || '';
 }
 
 function sortMessagesByTimestamp(messages = []) {
@@ -3937,7 +3932,7 @@ function renderMessageThread() {
         meta.className = 'message-meta';
         meta.append(
             createTextElement('span', 'message-author', author),
-            createTextElement('span', 'message-time', message.time || '')
+            createTextElement('span', 'message-time', getMessageDisplayTime(message))
         );
 
         const text = createTextElement('div', 'message-text', message.text || '');
@@ -5874,42 +5869,11 @@ function createNotificationActionButton(className, textContent, onClick) {
 }
 
 function parseNotificationTimestamp(timestamp) {
-    if (!timestamp) return new Date();
-
-    if (typeof timestamp.toDate === 'function') {
-        return timestamp.toDate();
-    }
-
-    if (typeof timestamp.seconds === 'number') {
-        return new Date((timestamp.seconds * 1000) + Math.floor((timestamp.nanoseconds || 0) / 1000000));
-    }
-
-    if (typeof timestamp._seconds === 'number') {
-        return new Date((timestamp._seconds * 1000) + Math.floor((timestamp._nanoseconds || 0) / 1000000));
-    }
-
-    return new Date(timestamp);
+    return TimestampUtils.parseTimestamp(timestamp) || new Date();
 }
 
 function formatRelativeTime(timestamp) {
-    if (!timestamp) return 'Just now';
-
-    const date = parseNotificationTimestamp(timestamp);
-    if (Number.isNaN(date.getTime())) return 'Just now';
-
-    const now = new Date();
-    const diffMs = now - date;
-    const diffSecs = Math.floor(diffMs / 1000);
-    const diffMins = Math.floor(diffSecs / 60);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
-
-    if (diffSecs < 60) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-
-    return date.toLocaleDateString();
+    return TimestampUtils.formatRelativeTimestamp(timestamp);
 }
 
 function renderNotificationItem(notification) {

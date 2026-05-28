@@ -107,6 +107,10 @@ const PostInteractions = (() => {
     }
   }
 
+  const formatCommentTimestamp = (timestamp) => {
+    return window.StudyHiveTimestamps?.formatRelativeTimestamp(timestamp) || 'Just now';
+  }
+
   // ========================================
   // UPVOTE FUNCTIONALITY
   // ========================================
@@ -571,7 +575,7 @@ const PostInteractions = (() => {
 
     const time = document.createElement('span');
     time.className = 'insights-comment-time';
-    time.textContent = comment.timestamp || 'just now';
+    time.textContent = formatCommentTimestamp(comment.createdAt || comment.timestamp);
 
     const text = document.createElement('p');
     text.className = 'insights-comment-text';
