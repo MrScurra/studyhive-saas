@@ -14,6 +14,8 @@ const ACTIVE_FRIEND_REFRESH_MS = 60 * 1000;
 const ENABLE_PRESENCE = false;
 const FRIENDS_CACHE_MS = 30 * 1000;
 const TimestampUtils = window.StudyHiveTimestamps;
+const IMAGE_ATTACHMENT_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']);
+const IMAGE_ATTACHMENT_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif']);
 
 let firebaseAuth = null;
 let firebaseOnAuthStateChanged = null;
@@ -1270,15 +1272,40 @@ function getPostAttachmentData(post) {
     return {
         fileName: post.fileName || post.fileOriginalName || attachment.originalName || '',
         fileSize: post.fileSize || attachment.sizeFormatted || '',
-        fileUrl: resolveAttachmentUrl(post.fileUrl || attachment.url || '')
+        fileUrl: resolveAttachmentUrl(post.fileUrl || attachment.url || ''),
+        fileMimeType: post.fileMimeType || attachment.mimeType || attachment.type || ''
     };
 }
 
-function createPostAttachment(fileName, fileSize, fileUrl = '') {
+function getAttachmentExtension(source = '') {
+    if (!source) return '';
+
+    try {
+        const parsedUrl = new URL(source, window.location.href);
+        return parsedUrl.pathname.split('.').pop().toLowerCase();
+    } catch (error) {
+        return String(source).split('?')[0].split('#')[0].split('.').pop().toLowerCase();
+    }
+}
+
+function isImageAttachment({ fileName = '', fileUrl = '', fileMimeType = '' } = {}) {
+    const normalizedMime = String(fileMimeType || '').split(';')[0].trim().toLowerCase();
+    const fileNameExtension = getAttachmentExtension(fileName);
+    const fileUrlExtension = getAttachmentExtension(fileUrl);
+
+    if (IMAGE_ATTACHMENT_MIME_TYPES.has(normalizedMime)) {
+        return true;
+    }
+
+    return IMAGE_ATTACHMENT_EXTENSIONS.has(fileNameExtension)
+        || IMAGE_ATTACHMENT_EXTENSIONS.has(fileUrlExtension);
+}
+
+function createAttachmentFileLink(fileName, fileSize, fileUrl = '', className = 'post-attachment') {
     if (!fileName) return null;
 
     const attachment = document.createElement(fileUrl ? 'a' : 'div');
-    attachment.className = 'post-attachment';
+    attachment.className = className;
 
     if (fileUrl) {
         attachment.href = resolveAttachmentUrl(fileUrl);
@@ -1297,29 +1324,65 @@ function createPostAttachment(fileName, fileSize, fileUrl = '') {
     return attachment;
 }
 
+function createPostImageAttachment(fileName, fileSize, fileUrl) {
+    const resolvedUrl = resolveAttachmentUrl(fileUrl);
+    const attachment = document.createElement('div');
+    attachment.className = 'post-attachment post-image-attachment';
+
+    const previewLink = document.createElement('a');
+    previewLink.className = 'post-image-preview-link';
+    previewLink.href = resolvedUrl;
+    previewLink.target = '_blank';
+    previewLink.rel = 'noopener';
+    previewLink.title = `Open ${fileName}`;
+
+    const image = document.createElement('img');
+    image.className = 'post-image-preview';
+    image.src = resolvedUrl;
+    image.alt = `Preview of ${fileName}`;
+    image.loading = 'lazy';
+    image.decoding = 'async';
+    image.addEventListener('error', () => {
+        const fallback = createAttachmentFileLink(fileName, fileSize, resolvedUrl);
+        if (fallback) attachment.replaceWith(fallback);
+    }, { once: true });
+
+    previewLink.appendChild(image);
+
+    const fileLink = createAttachmentFileLink(
+        fileName,
+        fileSize,
+        resolvedUrl,
+        'post-image-file-link'
+    );
+
+    attachment.append(previewLink);
+    if (fileLink) attachment.append(fileLink);
+
+    return attachment;
+}
+
+function createPostAttachment(fileName, fileSize, fileUrl = '', fileMimeType = '') {
+    if (fileUrl && isImageAttachment({ fileName, fileUrl, fileMimeType })) {
+        return createPostImageAttachment(fileName, fileSize, fileUrl);
+    }
+
+    return createAttachmentFileLink(fileName, fileSize, fileUrl);
+}
+
 function createPostAttachmentMarkup(post) {
-    const { fileName, fileSize, fileUrl } = getPostAttachmentData(post);
+    const { fileName, fileSize, fileUrl, fileMimeType } = getPostAttachmentData(post);
 
     if (!fileName) return '';
 
-    const wrapper = document.createElement(fileUrl ? 'a' : 'div');
-    wrapper.className = 'post-attachment saved-post-attachment';
-
-    if (fileUrl) {
-        wrapper.href = fileUrl;
-        wrapper.download = fileName;
-        wrapper.target = '_blank';
-        wrapper.rel = 'noopener';
-        wrapper.title = `Download ${fileName}`;
+    if (fileUrl && isImageAttachment({ fileName, fileUrl, fileMimeType })) {
+        const wrapper = createPostImageAttachment(fileName, fileSize, fileUrl);
+        return wrapper.outerHTML;
     }
 
-    wrapper.append(
-        createTextElement('span', 'attachment-icon', '📄'),
-        createTextElement('span', 'attachment-name', fileName),
-        createTextElement('span', 'attachment-size', fileSize ? `(${fileSize})` : '')
-    );
+    const wrapper = createAttachmentFileLink(fileName, fileSize, fileUrl, 'post-attachment saved-post-attachment');
 
-    return wrapper.outerHTML;
+    return wrapper ? wrapper.outerHTML : '';
 }
 
 function createPostActions({
@@ -1430,8 +1493,8 @@ function createPostCard(post) {
         createTextElement('span', 'category-label', category)
     );
 
-    const { fileName, fileSize, fileUrl } = getPostAttachmentData(post);
-    const attachment = createPostAttachment(fileName, fileSize, fileUrl);
+    const { fileName, fileSize, fileUrl, fileMimeType } = getPostAttachmentData(post);
+    const attachment = createPostAttachment(fileName, fileSize, fileUrl, fileMimeType);
     if (attachment) {
         article.append(attachment);
     }
