@@ -13,6 +13,7 @@ const ACTIVE_FRIEND_WINDOW_MS = 5 * 60 * 1000;
 const ACTIVE_FRIEND_REFRESH_MS = 60 * 1000;
 const ENABLE_PRESENCE = false;
 const FRIENDS_CACHE_MS = 30 * 1000;
+const RECENT_POSTS_REALTIME_LIMIT = 30;
 const TimestampUtils = window.StudyHiveTimestamps;
 const IMAGE_ATTACHMENT_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']);
 const IMAGE_ATTACHMENT_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif']);
@@ -275,6 +276,7 @@ let selectedCircleMembers = [];
 let acceptedFriends = [];
 let loadedPosts = [];
 let postAuthorProfileCache = new Map();
+let pendingFeedPostIds = new Set();
 let userPresenceById = new Map();
 let activeFriendsFromPresence = [];
 let activeFriendsPresenceLoadedAt = 0;
@@ -1828,8 +1830,107 @@ async function deletePostRequest(postId) {
     }
 }
 
+function getPostId(post = {}) {
+    return String(post.id || '').trim();
+}
+
+function findRenderedPostElement(postId) {
+    const normalizedPostId = String(postId || '').trim();
+    if (!normalizedPostId || !feed) return null;
+
+    return Array.from(feed.querySelectorAll('.post[data-post-id]'))
+        .find((postElement) => String(postElement.dataset.postId || '') === normalizedPostId) || null;
+}
+
+function hasLoadedOrRenderedPost(postId, { includePending = true } = {}) {
+    const normalizedPostId = String(postId || '').trim();
+
+    return Boolean(
+        normalizedPostId
+        && (
+            (includePending && pendingFeedPostIds.has(normalizedPostId))
+            ||
+            loadedPosts.some((post) => getPostId(post) === normalizedPostId)
+            || findRenderedPostElement(normalizedPostId)
+        )
+    );
+}
+
+function removeFeedEmptyStates() {
+    feed?.querySelectorAll('.friend-empty-state').forEach((emptyState) => emptyState.remove());
+}
+
+function dedupePostsById(posts = []) {
+    const seenPostIds = new Set();
+
+    return posts.filter((post) => {
+        const postId = getPostId(post);
+        if (!postId) return false;
+        if (seenPostIds.has(postId)) return false;
+
+        seenPostIds.add(postId);
+        return true;
+    });
+}
+
+async function prependPostsIfMissing(posts = [], source = 'realtime') {
+    const newPosts = [];
+    const queuedPostIds = new Set();
+
+    posts.forEach((post) => {
+        const postId = getPostId(post);
+        if (!postId || queuedPostIds.has(postId) || hasLoadedOrRenderedPost(postId)) return;
+
+        queuedPostIds.add(postId);
+        newPosts.push(post);
+    });
+
+    if (newPosts.length === 0) {
+        console.log('[realtime:feed] duplicate posts skipped', { source });
+        return 0;
+    }
+
+    queuedPostIds.forEach((postId) => pendingFeedPostIds.add(postId));
+
+    try {
+        const hydratedPosts = dedupePostsById(await hydratePostsWithAuthorProfiles(newPosts));
+        const postsToRender = hydratedPosts.filter((post) => !hasLoadedOrRenderedPost(getPostId(post), { includePending: false }));
+
+        if (postsToRender.length === 0) {
+            console.log('[realtime:feed] hydrated duplicate posts skipped', { source });
+            return 0;
+        }
+
+        removeFeedEmptyStates();
+
+        const fragment = document.createDocumentFragment();
+        postsToRender.forEach((post) => {
+            fragment.appendChild(createPostCard(post));
+        });
+        feed.prepend(fragment);
+
+        loadedPosts = dedupePostsById([
+            ...postsToRender,
+            ...loadedPosts
+        ]);
+
+        refreshPostInteractions();
+        updateProfileStats();
+
+        console.log('[realtime:feed] posts rendered', {
+            source,
+            count: postsToRender.length,
+            postIds: postsToRender.map(getPostId)
+        });
+
+        return postsToRender.length;
+    } finally {
+        queuedPostIds.forEach((postId) => pendingFeedPostIds.delete(postId));
+    }
+}
+
 async function renderPosts(posts) {
-    loadedPosts = await hydratePostsWithAuthorProfiles(posts);
+    loadedPosts = dedupePostsById(await hydratePostsWithAuthorProfiles(posts));
     feed.innerHTML = '';
     if (loadedPosts.length === 0) {
         feed.appendChild(createTextElement('p', 'friend-empty-state', 'No posts yet.'));
@@ -1858,8 +1959,10 @@ async function loadPosts() {
         await renderPosts(data.posts || []);
     } catch (error) {
         console.error('Loading posts failed:', error);
-        feed.innerHTML = '';
-        feed.appendChild(createTextElement('p', 'friend-empty-state', 'Could not load posts right now.'));
+        if (!feed.querySelector('.post[data-post-id]')) {
+            feed.innerHTML = '';
+            feed.appendChild(createTextElement('p', 'friend-empty-state', 'Could not load posts right now.'));
+        }
         refreshPostInteractions();
     }
 }
@@ -1976,13 +2079,7 @@ async function publishPost() {
 
         const [hydratedPost] = await hydratePostsWithAuthorProfiles([data.post]);
 
-        loadedPosts = [
-            hydratedPost,
-            ...loadedPosts.filter(post => String(post.id) !== String(hydratedPost?.id))
-        ].filter(Boolean);
-        updateProfileStats();
-        feed.prepend(createPostCard(hydratedPost));
-        refreshPostInteractions();
+        await prependPostsIfMissing([hydratedPost], 'publish');
         resetPostForm();
         showToast('Post published successfully');
     } catch (error) {
@@ -5401,6 +5498,7 @@ function initSearchProfileModal() {
 // ========================================
 
 const realtimeUnsubscribers = {
+    posts: null,
     notifications: null,
     incomingFriendRequests: null,
     outgoingFriendRequests: null,
@@ -5526,6 +5624,7 @@ function stopRealtimeListeners() {
     realtimeUserId = null;
     userPresenceById = new Map();
     activeFriendsFromPresence = [];
+    pendingFeedPostIds.clear();
     realtimeMessagesCache = [];
     realtimeMessagesLoaded = false;
     realtimeNotificationsLoaded = false;
@@ -5551,8 +5650,70 @@ function getSnapshotItems(snapshot) {
     }));
 }
 
+function getSnapshotChangeItem(change) {
+    return {
+        id: change.doc.id,
+        ...change.doc.data()
+    };
+}
+
+function normalizeRealtimePost(post = {}, userId = getCurrentUserId()) {
+    const upvotes = Number(post.upvotes || post.baseUpvotes || 0);
+    const comments = Number(post.comments || 0);
+    const bookmarks = Number(post.bookmarks || 0);
+
+    return {
+        ...post,
+        upvotes: Number.isFinite(upvotes) ? upvotes : 0,
+        baseUpvotes: Number.isFinite(upvotes) ? upvotes : 0,
+        comments: Number.isFinite(comments) ? comments : 0,
+        bookmarks: Number.isFinite(bookmarks) ? bookmarks : 0,
+        isOwner: getPostAuthorUserId(post) === String(userId || ''),
+        upvoted: Boolean(post.upvoted),
+        bookmarked: Boolean(post.bookmarked)
+    };
+}
+
+function logFeedRealtimeListenerCount(action) {
+    console.log('[realtime:feed] listener count', {
+        action,
+        feedListenerCount: isRealtimeListenerActive('posts') ? 1 : 0,
+        recentPostLimit: RECENT_POSTS_REALTIME_LIMIT
+    });
+}
+
 function shouldDisplayNotification(notification = {}) {
     return !MUTED_NOTIFICATION_TYPES.has(String(notification.type || '').toLowerCase());
+}
+
+function startPostRealtimeListener(userId) {
+    if (hasRealtimeListenerForUser('posts', userId)) {
+        logFeedRealtimeListenerCount('already-running');
+        return;
+    }
+
+    const recentPostsQuery = firebaseQuery(
+        firebaseCollection(firebaseDb, 'posts'),
+        firebaseOrderBy('createdAt', 'desc'),
+        firebaseLimit(RECENT_POSTS_REALTIME_LIMIT)
+    );
+
+    const unsubscribe = firebaseOnSnapshot(recentPostsQuery, (snapshot) => {
+        const addedPosts = snapshot.docChanges()
+            .filter((change) => change.type === 'added')
+            .map((change) => normalizeRealtimePost(getSnapshotChangeItem(change), userId));
+
+        if (addedPosts.length === 0) return;
+
+        prependPostsIfMissing(addedPosts, 'firestore-posts').catch((error) => {
+            console.error('Realtime feed render failed; fetch fallback is still active:', error);
+        });
+    }, (error) => {
+        console.error('Realtime feed failed; fetch fallback is still active:', error);
+    });
+
+    registerRealtimeListener('posts', userId, unsubscribe);
+    logFeedRealtimeListenerCount('started');
 }
 
 function startNotificationRealtimeListener(userId) {
@@ -5695,6 +5856,7 @@ function startRealtimeListeners() {
     realtimeUserId = userId;
     bindRealtimeLifecycleEvents();
 
+    startPostRealtimeListener(userId);
     startNotificationRealtimeListener(userId);
     startFriendRealtimeListeners(userId);
     startMessageRealtimeListener(userId);
