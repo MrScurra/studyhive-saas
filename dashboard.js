@@ -16,6 +16,7 @@ const FRIENDS_CACHE_MS = 30 * 1000;
 const TimestampUtils = window.StudyHiveTimestamps;
 const IMAGE_ATTACHMENT_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']);
 const IMAGE_ATTACHMENT_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif']);
+const TWO_FACTOR_SESSION_PREFIX = 'studyhive:2fa:verified:';
 
 let firebaseAuth = null;
 let firebaseOnAuthStateChanged = null;
@@ -195,6 +196,22 @@ async function loadFirebaseAuth() {
     }
 }
 
+function isTwoFactorVerifiedForUser(userId) {
+    return Boolean(userId && sessionStorage.getItem(`${TWO_FACTOR_SESSION_PREFIX}${userId}`) === 'true');
+}
+
+async function requiresEmailOtpForDashboard(user = firebaseAuth?.currentUser) {
+    if (!user) return false;
+
+    const signInProvider = await getCurrentSignInProvider(user);
+    const providerIds = getProviderIds(user);
+
+    if (signInProvider === 'google.com') return false;
+    if (signInProvider === 'password') return true;
+
+    return providerIds.includes('password');
+}
+
 async function initAuthGatekeeper() {
     const firebaseReady = await loadFirebaseAuth();
 
@@ -209,7 +226,7 @@ async function initAuthGatekeeper() {
             authGatekeeperUnsubscribe = null;
         }
 
-        authGatekeeperUnsubscribe = firebaseOnAuthStateChanged(firebaseAuth, (user) => {
+        authGatekeeperUnsubscribe = firebaseOnAuthStateChanged(firebaseAuth, async (user) => {
             if (typeof authGatekeeperUnsubscribe === 'function') {
                 authGatekeeperUnsubscribe();
                 authGatekeeperUnsubscribe = null;
@@ -217,6 +234,15 @@ async function initAuthGatekeeper() {
 
             if (!user) {
                 console.log('No user detected, redirecting to login...');
+                window.location.href = 'Login.html';
+                resolve(false);
+                return;
+            }
+
+            const needsOtp = await requiresEmailOtpForDashboard(user);
+
+            if (needsOtp && !isTwoFactorVerifiedForUser(user.uid)) {
+                console.log('Email OTP verification required, redirecting to login...');
                 window.location.href = 'Login.html';
                 resolve(false);
                 return;

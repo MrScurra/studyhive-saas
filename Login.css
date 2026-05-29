@@ -171,6 +171,43 @@ body {
   color: #FFD54F;
 }
 
+.otp-copy {
+  font-size: 15px;
+  color: #333;
+  line-height: 1.5;
+  margin-bottom: 22px;
+  text-align: center;
+}
+
+.otp-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.otp-actions .link-button {
+  color: #000;
+  font-weight: 700;
+  text-decoration: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  transition: color 0.3s ease;
+  padding: 0;
+}
+
+.otp-actions .link-button:hover:not(:disabled) {
+  color: #FFD54F;
+}
+
+.otp-actions .link-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .hidden {
   display: none;
 }
@@ -241,6 +278,17 @@ body {
   margin-bottom: 16px;
   font-size: 14px;
   border-left: 4px solid #c00;
+  animation: slideIn 0.3s ease;
+}
+
+.success-message {
+  background-color: #edf8ef;
+  color: #1f7a34;
+  padding: 12px;
+  border-radius: 4px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  border-left: 4px solid #2e9d46;
   animation: slideIn 0.3s ease;
 }
 

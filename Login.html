@@ -94,10 +94,31 @@
             Already have an account? <button type="button" class="link-button" id="showLogin">Log In</button>
           </div>
         </div>
+
+        <div id="otpView" class="hidden">
+          <form id="otpForm">
+            <p class="otp-copy" id="otpEmailMessage">Enter the 6-digit code sent to your email.</p>
+
+            <div class="form-group">
+              <label for="otpCode">Verification Code</label>
+              <input type="text" id="otpCode" name="otpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="000000" required>
+            </div>
+
+            <div id="otpErrorContainer" class="error-container"></div>
+
+            <button type="submit" class="login-btn" id="otpVerifyBtn">Verify Code</button>
+          </form>
+
+          <div class="otp-actions">
+            <button type="button" class="link-button" id="otpResendBtn">Resend Code</button>
+            <button type="button" class="link-button" id="otpUseDifferentAccountBtn">Use a different account</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
+  <script src="api-config.js"></script>
   <script type="module" src="./login.js"></script>
 </body>
 </html>
