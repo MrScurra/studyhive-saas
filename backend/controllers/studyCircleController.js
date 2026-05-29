@@ -1,14 +1,49 @@
+const crypto = require('crypto')
 const studyCircles = require('../data/studyCirclesStore')
 const firestoreService = require('../services/firestoreService')
 
 const DEFAULT_CIRCLE_AVATAR = '👥'
+const FRONTEND_INVITE_BASE_URL = 'https://study-collab-saas-js.web.app'
 
 function createCircleId() {
   return `circle-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-function createInviteLink(circleId) {
-  return `studyhive.com/join/${circleId}`
+function createInviteCode() {
+  return crypto.randomBytes(5).toString('hex').toUpperCase()
+}
+
+async function createUniqueInviteCode() {
+  for (let attempts = 0; attempts < 8; attempts += 1) {
+    const inviteCode = createInviteCode()
+    const existingCircle = await firestoreService.getStudyCircleByInviteCode(inviteCode)
+
+    if (!existingCircle) {
+      return inviteCode
+    }
+  }
+
+  throw new Error('Could not create a unique invite code')
+}
+
+function createInviteLink(inviteCode) {
+  return `${FRONTEND_INVITE_BASE_URL}/dashboard.html?circleInvite=${encodeURIComponent(inviteCode)}`
+}
+
+function normalizeInviteCode(value) {
+  return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '')
+}
+
+function requireSignedInUser(req) {
+  const userId = String(req.user?.id || '').trim()
+
+  if (!userId || userId === 'default-user') {
+    const error = new Error('Please sign in before joining this study circle')
+    error.status = 401
+    throw error
+  }
+
+  return userId
 }
 
 function getCurrentUserSummary(req) {
@@ -88,6 +123,7 @@ const createCircle = async (req, res) => {
     const creatorName = req.user?.name || 'StudyHive User'
     const creatorId = req.user?.id || 'default-user'
     const inviteeIds = normalizeInviteeIds(req.body.inviteeIds || req.body.memberIds, creatorId)
+    const inviteCode = await createUniqueInviteCode()
 
     await validateInviteeFriendships(creatorId, inviteeIds)
 
@@ -102,7 +138,8 @@ const createCircle = async (req, res) => {
       members: normalizeCreatorMembers(creatorName),
       memberIds: normalizeCreatorMemberIds(creatorId),
       createdAt: new Date().toISOString(),
-      inviteLink: createInviteLink(circleId),
+      inviteCode,
+      inviteLink: createInviteLink(inviteCode),
       avatar: DEFAULT_CIRCLE_AVATAR
     }
 
@@ -121,6 +158,60 @@ const createCircle = async (req, res) => {
 
     console.error('Could not create study circle:', error)
     return res.status(500).json({ error: 'Failed to create study circle' })
+  }
+}
+
+const getCircleByInviteCode = async (req, res) => {
+  try {
+    const userId = requireSignedInUser(req)
+    const inviteCode = normalizeInviteCode(req.params.inviteCode)
+
+    if (!inviteCode) {
+      return res.status(400).json({ error: 'Invite code is required' })
+    }
+
+    const circle = await firestoreService.getStudyCircleByInviteCode(inviteCode)
+
+    if (!circle) {
+      return res.status(404).json({ error: 'Study circle invite was not found' })
+    }
+
+    const memberIds = (circle.memberIds || []).map((memberId) => String(memberId).trim())
+    return res.json({
+      circle,
+      alreadyMember: memberIds.includes(userId)
+    })
+  } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ error: error.message })
+    }
+
+    return res.status(500).json({ error: 'Failed to load study circle invite' })
+  }
+}
+
+const joinCircleByInviteCode = async (req, res) => {
+  try {
+    requireSignedInUser(req)
+    const inviteCode = normalizeInviteCode(req.params.inviteCode)
+
+    if (!inviteCode) {
+      return res.status(400).json({ error: 'Invite code is required' })
+    }
+
+    const result = await firestoreService.joinStudyCircleByInviteCode(inviteCode, getCurrentUserSummary(req))
+
+    if (!result) {
+      return res.status(404).json({ error: 'Study circle invite was not found' })
+    }
+
+    return res.json(result)
+  } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ error: error.message })
+    }
+
+    return res.status(500).json({ error: 'Failed to join study circle' })
   }
 }
 
@@ -237,6 +328,8 @@ const declineCircleInvite = async (req, res) => {
 module.exports = {
   getCircles,
   createCircle,
+  getCircleByInviteCode,
+  joinCircleByInviteCode,
   inviteCircleMembers,
   acceptCircleInvite,
   leaveCircle,

@@ -18,6 +18,8 @@ const TimestampUtils = window.StudyHiveTimestamps;
 const IMAGE_ATTACHMENT_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']);
 const IMAGE_ATTACHMENT_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif']);
 const TWO_FACTOR_SESSION_PREFIX = 'studyhive:2fa:verified:';
+const STUDYHIVE_FRONTEND_URL = 'https://study-collab-saas-js.web.app';
+const PENDING_CIRCLE_INVITE_KEY = 'studyhive:pendingCircleInvite';
 
 let firebaseAuth = null;
 let firebaseOnAuthStateChanged = null;
@@ -163,6 +165,8 @@ let toastTimer;
 let pendingDangerAction = '';
 let pendingLeaveCircle = null;
 let pendingDeleteCircle = null;
+let pendingCircleInvite = null;
+let circleInviteProcessing = false;
 let selectedStudyCircleId = null;
 let circleModalMode = 'create';
 let inviteTargetCircle = null;
@@ -213,11 +217,56 @@ async function requiresEmailOtpForDashboard(user = firebaseAuth?.currentUser) {
     return providerIds.includes('password');
 }
 
+function getCircleInviteCodeFromCurrentUrl() {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        return normalizeInviteCode(params.get('circleInvite'));
+    } catch (error) {
+        return '';
+    }
+}
+
+function storePendingCircleInviteFromUrl() {
+    const inviteCode = getCircleInviteCodeFromCurrentUrl();
+
+    if (inviteCode) {
+        sessionStorage.setItem(PENDING_CIRCLE_INVITE_KEY, inviteCode);
+    }
+
+    return inviteCode;
+}
+
+function getPendingCircleInviteCode() {
+    return getCircleInviteCodeFromCurrentUrl()
+        || normalizeInviteCode(sessionStorage.getItem(PENDING_CIRCLE_INVITE_KEY));
+}
+
+function clearPendingCircleInviteCode() {
+    sessionStorage.removeItem(PENDING_CIRCLE_INVITE_KEY);
+
+    try {
+        const url = new URL(window.location.href);
+
+        if (!url.searchParams.has('circleInvite')) return;
+
+        url.searchParams.delete('circleInvite');
+        const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+        window.history.replaceState({}, document.title, nextUrl);
+    } catch (error) {
+        // The invite has already been handled; URL cleanup is optional.
+    }
+}
+
+function redirectToLoginWithPendingInvite() {
+    storePendingCircleInviteFromUrl();
+    window.location.href = 'Login.html';
+}
+
 async function initAuthGatekeeper() {
     const firebaseReady = await loadFirebaseAuth();
 
     if (!firebaseReady) {
-        window.location.href = 'Login.html';
+        redirectToLoginWithPendingInvite();
         return false;
     }
 
@@ -235,7 +284,7 @@ async function initAuthGatekeeper() {
 
             if (!user) {
                 console.log('No user detected, redirecting to login...');
-                window.location.href = 'Login.html';
+                redirectToLoginWithPendingInvite();
                 resolve(false);
                 return;
             }
@@ -244,7 +293,7 @@ async function initAuthGatekeeper() {
 
             if (needsOtp && !isTwoFactorVerifiedForUser(user.uid)) {
                 console.log('Email OTP verification required, redirecting to login...');
-                window.location.href = 'Login.html';
+                redirectToLoginWithPendingInvite();
                 resolve(false);
                 return;
             }
@@ -341,8 +390,39 @@ function generateCircleId() {
     return 'circle-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
 }
 
-function generateInviteLink(circleId) {
-    return `studyhive.com/join/${circleId}`;
+function normalizeInviteCode(value) {
+    return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '');
+}
+
+function generateInviteCode() {
+    return normalizeInviteCode(`SH${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`);
+}
+
+function extractInviteCodeFromLink(inviteLink) {
+    const link = String(inviteLink || '').trim();
+
+    if (!link) return '';
+
+    try {
+        const parsedUrl = new URL(link, window.location.href);
+        return normalizeInviteCode(parsedUrl.searchParams.get('circleInvite'));
+    } catch (error) {
+        return '';
+    }
+}
+
+function generateInviteLink(inviteCode) {
+    const normalizedCode = normalizeInviteCode(inviteCode);
+    return `${STUDYHIVE_FRONTEND_URL}/dashboard.html?circleInvite=${encodeURIComponent(normalizedCode)}`;
+}
+
+function getCircleInviteCode(circle = {}) {
+    return normalizeInviteCode(circle.inviteCode) || extractInviteCodeFromLink(circle.inviteLink);
+}
+
+function getCircleInviteLink(circle = {}) {
+    const inviteCode = getCircleInviteCode(circle) || normalizeInviteCode(circle.id);
+    return generateInviteLink(inviteCode);
 }
 
 function createCircleSlug(name) {
@@ -366,6 +446,8 @@ function normalizeCircleForUi(circle) {
         : Array.isArray(circle.memberIds);
     const rawMemberIds = hasExplicitMemberIds ? circle.memberIds : [];
     const memberIds = [...new Set(rawMemberIds.map(memberId => String(memberId).trim()).filter(Boolean))];
+    const inviteCode = getCircleInviteCode(circle);
+
     return {
         id,
         name,
@@ -376,7 +458,8 @@ function normalizeCircleForUi(circle) {
         memberIds,
         hasExplicitMemberIds,
         createdAt: circle.createdAt || new Date().toISOString(),
-        inviteLink: circle.inviteLink || generateInviteLink(id),
+        inviteCode,
+        inviteLink: getCircleInviteLink({ ...circle, id, inviteCode }),
         avatar: circle.avatar || DEFAULT_CIRCLE_AVATAR
     };
 }
@@ -555,6 +638,8 @@ function syncStudyCircleViews(circles = studyCircles, { persist = false } = {}) 
 
 function createCircleObject(name, description, memberIds) {
     const circleId = generateCircleId();
+    const inviteCode = generateInviteCode();
+
     return normalizeCircleForUi({
         id: circleId,
         name,
@@ -564,7 +649,8 @@ function createCircleObject(name, description, memberIds) {
         members: [currentUser.name],
         memberIds: [getCurrentUserId()],
         createdAt: new Date().toISOString(),
-        inviteLink: generateInviteLink(circleId),
+        inviteCode,
+        inviteLink: generateInviteLink(inviteCode),
         avatar: DEFAULT_CIRCLE_AVATAR
     });
 }
@@ -709,6 +795,36 @@ async function sendCircleInvitesToBackend(circleId, memberIds) {
         showToast(error.message || 'Could not invite members');
         return null;
     }
+}
+
+async function fetchCircleInviteFromBackend(inviteCode) {
+    const response = await fetch(`${API_BASE_URL}/circles/invite/${encodeURIComponent(inviteCode)}`, {
+        headers: getCurrentUserRequestHeaders()
+    });
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+        throw new Error(data.error || 'Could not load study circle invite');
+    }
+
+    return data;
+}
+
+async function joinCircleInviteOnBackend(inviteCode) {
+    const response = await fetch(`${API_BASE_URL}/circles/invite/${encodeURIComponent(inviteCode)}/join`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            ...getCurrentUserRequestHeaders()
+        }
+    });
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+        throw new Error(data.error || 'Could not join study circle');
+    }
+
+    return data;
 }
 
 function createInvitation(circleId, circleName, fromUser, toUser) {
@@ -2743,15 +2859,22 @@ function openDangerModal(action) {
 }
 
 function closeDangerModal() {
+    const shouldClearCircleInvite = pendingDangerAction === 'join circle invite';
+
     if (dangerConfirmModal) {
         dangerConfirmModal.classList.remove('open');
         dangerConfirmModal.style.display = '';
         dangerConfirmModal.setAttribute('aria-hidden', 'true');
     }
 
+    if (shouldClearCircleInvite) {
+        clearPendingCircleInviteCode();
+    }
+
     pendingDangerAction = '';
     pendingLeaveCircle = null;
     pendingDeleteCircle = null;
+    pendingCircleInvite = null;
 
     if (confirmDangerActionBtn) {
         confirmDangerActionBtn.disabled = false;
@@ -2792,6 +2915,11 @@ function initDangerModal() {
 
         if (pendingDangerAction === 'delete circle') {
             confirmDeleteStudyCircle();
+            return;
+        }
+
+        if (pendingDangerAction === 'join circle invite') {
+            confirmJoinCircleInvite();
             return;
         }
 
@@ -4321,6 +4449,7 @@ function initCreateCircleModal() {
     const descriptionCounter = document.getElementById('descriptionCounter');
     const cancelCircleBtn = document.getElementById('cancelCircleBtn');
     const closeButtons = document.querySelectorAll('[data-close-circle-modal]');
+    const copyLinkBtn = document.getElementById('copyLinkBtn');
     const doneBtn = document.getElementById('doneBtn');
 
     selectedCircleMembers = [];
@@ -4372,7 +4501,64 @@ function initCreateCircleModal() {
         memberSearch.addEventListener('input', filterAndRenderMembers);
     }
 
+    if (copyLinkBtn && copyLinkBtn.dataset.ready !== 'true') {
+        copyLinkBtn.dataset.ready = 'true';
+        copyLinkBtn.dataset.defaultText = copyLinkBtn.textContent || 'Copy';
+        copyLinkBtn.addEventListener('click', copyCurrentInviteLink);
+    }
+
     renderMemberCheckboxes();
+}
+
+function resetCopyLinkButton() {
+    const copyLinkBtn = document.getElementById('copyLinkBtn');
+
+    if (!copyLinkBtn) return;
+
+    copyLinkBtn.disabled = false;
+    copyLinkBtn.textContent = copyLinkBtn.dataset.defaultText || 'Copy';
+}
+
+function setInviteLinkForCircle(circle) {
+    const inviteLinkInput = document.getElementById('inviteLink');
+
+    if (!inviteLinkInput) return '';
+
+    const inviteLink = circle ? getCircleInviteLink(circle) : '';
+    inviteLinkInput.value = inviteLink;
+    return inviteLink;
+}
+
+async function copyCurrentInviteLink() {
+    const inviteLinkInput = document.getElementById('inviteLink');
+    const copyLinkBtn = document.getElementById('copyLinkBtn');
+    const inviteLink = inviteLinkInput?.value || '';
+
+    if (!inviteLink) {
+        showToast('Invite link is not ready yet.');
+        return;
+    }
+
+    try {
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(inviteLink);
+        } else {
+            inviteLinkInput.focus();
+            inviteLinkInput.select();
+            document.execCommand('copy');
+        }
+
+        if (copyLinkBtn) {
+            copyLinkBtn.disabled = true;
+            copyLinkBtn.textContent = 'Copied!';
+            setTimeout(resetCopyLinkButton, 1200);
+        }
+
+        showToast('Invite link copied.');
+    } catch (error) {
+        console.error('Could not copy invite link:', error);
+        showToast('Could not copy invite link.');
+    }
 }
 
 function setCircleModalMode(mode = 'create', circle = null) {
@@ -4384,16 +4570,22 @@ function setCircleModalMode(mode = 'create', circle = null) {
     const circleDescription = document.getElementById('circleDescription');
     const circleNameGroup = circleName?.closest('.form-group');
     const circleDescriptionGroup = circleDescription?.closest('.form-group');
+    const memberSearch = document.getElementById('memberSearch');
+    const memberSearchGroup = memberSearch?.closest('.form-group');
+    const inviteLinkGroup = document.getElementById('inviteLinkGroup');
     const memberSearchLabel = document.querySelector('label[for="memberSearch"]');
     const submitButton = document.querySelector('#createCircleForm button[type="submit"]');
     const circleNameError = document.getElementById('circleNameError');
 
     if (circleNameError) circleNameError.textContent = '';
+    if (inviteLinkGroup) inviteLinkGroup.hidden = true;
+    resetCopyLinkButton();
 
     if (mode === 'invite') {
         if (title) title.textContent = 'Invite Members';
         if (circleNameGroup) circleNameGroup.hidden = true;
         if (circleDescriptionGroup) circleDescriptionGroup.hidden = true;
+        if (memberSearchGroup) memberSearchGroup.hidden = false;
         if (circleName) {
             circleName.required = false;
             circleName.value = circle?.name || '';
@@ -4404,12 +4596,30 @@ function setCircleModalMode(mode = 'create', circle = null) {
         return;
     }
 
+    if (mode === 'created') {
+        if (title) title.textContent = 'Study Circle Created';
+        if (circleNameGroup) circleNameGroup.hidden = true;
+        if (circleDescriptionGroup) circleDescriptionGroup.hidden = true;
+        if (memberSearchGroup) memberSearchGroup.hidden = true;
+        if (inviteLinkGroup) inviteLinkGroup.hidden = false;
+        if (circleName) {
+            circleName.required = false;
+            circleName.value = circle?.name || '';
+        }
+        if (circleDescription) circleDescription.value = '';
+        setInviteLinkForCircle(circle);
+        if (submitButton) submitButton.textContent = 'Done';
+        return;
+    }
+
     if (title) title.textContent = 'Create Study Circle';
     if (circleNameGroup) circleNameGroup.hidden = false;
     if (circleDescriptionGroup) circleDescriptionGroup.hidden = false;
+    if (memberSearchGroup) memberSearchGroup.hidden = false;
     if (circleName) circleName.required = true;
     if (memberSearchLabel) memberSearchLabel.textContent = 'Invite Friends';
     if (submitButton) submitButton.textContent = 'Create Circle';
+    setInviteLinkForCircle(null);
 }
 
 function openCreateCircleModal({ mode = 'create', circle = null, returnFocus = null } = {}) {
@@ -4428,6 +4638,7 @@ function openCreateCircleModal({ mode = 'create', circle = null, returnFocus = n
     form.reset();
     document.getElementById('descriptionCounter').textContent = '0/200';
     document.getElementById('inviteLinkGroup').hidden = true;
+    setInviteLinkForCircle(null);
     setCircleModalMode(mode, circle);
     if (memberSearch) memberSearch.value = '';
     renderMemberCheckboxes();
@@ -4455,6 +4666,8 @@ function closeCreateCircleModal({ resetToForm = false } = {}) {
 
     modal.classList.remove('active');
     modal.setAttribute('aria-hidden', 'true');
+    setInviteLinkForCircle(null);
+    resetCopyLinkButton();
 
     if (resetToForm) {
         form?.reset();
@@ -4592,6 +4805,11 @@ function handleCircleModalSubmit() {
         return;
     }
 
+    if (circleModalMode === 'created') {
+        closeCreateCircleModal({ resetToForm: true });
+        return;
+    }
+
     handleCreateCircle();
 }
 
@@ -4634,7 +4852,7 @@ async function handleCreateCircle() {
 
     if (submitButton) {
         submitButton.disabled = false;
-        submitButton.textContent = 'Create Circle';
+        submitButton.textContent = circleModalMode === 'created' ? 'Done' : 'Create Circle';
     }
 }
 
@@ -4706,8 +4924,10 @@ function showCircleCreatedSuccess(circle) {
         ? `${selectedCircleMembers.length} friend${selectedCircleMembers.length !== 1 ? 's' : ''} invited`
         : 'You can invite friends later.';
 
-    if (inviteLinkGroup) inviteLinkGroup.hidden = true;
-    closeCreateCircleModal({ resetToForm: true });
+    if (inviteLinkGroup) inviteLinkGroup.hidden = false;
+    setCircleModalMode('created', circle);
+    selectedCircleMembers = [];
+    renderSelectedMembers();
     showToast(`Study circle "${circle.name}" created successfully! ${inviteMessage}`);
 }
 
@@ -4914,6 +5134,122 @@ function replaceStudyCircleInState(updatedCircle) {
 function removeStudyCircleFromState(circleId) {
     const nextCircles = studyCircles.filter(circle => String(circle.id) !== String(circleId));
     syncStudyCircleViews(nextCircles, { persist: true });
+}
+
+async function refreshStudyCircleMembershipViews(updatedCircle = null) {
+    if (updatedCircle) {
+        replaceStudyCircleInState(updatedCircle);
+    }
+
+    await fetchStudyCirclesFromBackend();
+    renderMemberCheckboxes(document.getElementById('memberSearch')?.value || '');
+}
+
+function openCircleInviteConfirmation(circle, inviteCode) {
+    const normalizedCircle = normalizeCircleForUi(circle);
+
+    if (!normalizedCircle || !inviteCode) {
+        showToast('Study circle invite could not be loaded.');
+        clearPendingCircleInviteCode();
+        return;
+    }
+
+    pendingDangerAction = 'join circle invite';
+    pendingCircleInvite = {
+        inviteCode,
+        circle: normalizedCircle
+    };
+
+    if (!dangerConfirmModal || !dangerModalTitle || !dangerModalMessage || !confirmDangerActionBtn) {
+        if (window.confirm(`Join ${normalizedCircle.name}?`)) {
+            confirmJoinCircleInvite();
+        } else {
+            clearPendingCircleInviteCode();
+            pendingCircleInvite = null;
+            pendingDangerAction = '';
+        }
+        return;
+    }
+
+    dangerModalTitle.textContent = 'Join study circle?';
+    dangerModalMessage.textContent = `Do you want to join ${normalizedCircle.name}?`;
+    confirmDangerActionBtn.textContent = 'Join';
+    confirmDangerActionBtn.style.backgroundColor = '#c47f00';
+    confirmDangerActionBtn.disabled = false;
+
+    dangerConfirmModal.classList.add('open');
+    dangerConfirmModal.setAttribute('aria-hidden', 'false');
+    confirmDangerActionBtn.focus();
+}
+
+async function processPendingCircleInvite() {
+    const inviteCode = getPendingCircleInviteCode();
+
+    if (!inviteCode || circleInviteProcessing) return;
+
+    circleInviteProcessing = true;
+    sessionStorage.setItem(PENDING_CIRCLE_INVITE_KEY, inviteCode);
+
+    try {
+        const data = await fetchCircleInviteFromBackend(inviteCode);
+        const circle = normalizeCircleForUi(data.circle);
+
+        if (!circle) {
+            throw new Error('Study circle invite could not be loaded');
+        }
+
+        if (data.alreadyMember || isJoinedStudyCircle(circle)) {
+            await refreshStudyCircleMembershipViews(circle);
+            clearPendingCircleInviteCode();
+            showToast('You are already in this study circle');
+            return;
+        }
+
+        openCircleInviteConfirmation(circle, inviteCode);
+    } catch (error) {
+        console.error('Could not process study circle invite:', error);
+        showToast(error.message || 'Could not process study circle invite.');
+
+        if (/not found|required/i.test(error.message || '')) {
+            clearPendingCircleInviteCode();
+        }
+    } finally {
+        circleInviteProcessing = false;
+    }
+}
+
+async function confirmJoinCircleInvite() {
+    const invite = pendingCircleInvite;
+
+    if (!invite?.inviteCode) return;
+
+    if (confirmDangerActionBtn) {
+        confirmDangerActionBtn.disabled = true;
+        confirmDangerActionBtn.textContent = 'Joining...';
+    }
+
+    try {
+        const data = await joinCircleInviteOnBackend(invite.inviteCode);
+        const circle = normalizeCircleForUi(data.circle || invite.circle);
+
+        if (circle) {
+            await refreshStudyCircleMembershipViews(circle);
+        } else {
+            await fetchStudyCirclesFromBackend();
+        }
+
+        clearPendingCircleInviteCode();
+        closeDangerModal();
+        showToast(data.alreadyMember ? 'You are already in this study circle' : `Joined ${circle?.name || 'study circle'}`);
+    } catch (error) {
+        console.error('Join study circle invite failed:', error);
+        showToast(error.message || 'Could not join study circle.');
+
+        if (confirmDangerActionBtn) {
+            confirmDangerActionBtn.disabled = false;
+            confirmDangerActionBtn.textContent = 'Join';
+        }
+    }
 }
 
 async function confirmDeleteStudyCircle() {
@@ -6392,9 +6728,7 @@ async function initDashboard() {
     initAddMemberButton();
     initLeaveCircleButton();
     initDeleteCircleButton();
-
-    // Fetch study circles from backend and populate dropdown
-    fetchStudyCirclesFromBackend();
+    const studyCirclesLoad = fetchStudyCirclesFromBackend();
 
     initProfileEditor();
     initSettingsAccordions();
@@ -6403,6 +6737,9 @@ async function initDashboard() {
     await applyAuthProviderSettings();
     await loadUserSettingsFromBackend();
     initDangerModal();
+    // Fetch study circles before resolving any invite link so duplicate checks use fresh membership data.
+    await studyCirclesLoad;
+    await processPendingCircleInvite();
     initSaveSettings();
     initHelpSupport();
     initReportProblem();

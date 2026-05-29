@@ -1283,6 +1283,32 @@ const getStudyCircle = async (circleId) => {
   };
 };
 
+const getStudyCircleByInviteCode = async (inviteCode) => {
+  const firestore = getFirestore();
+  const code = String(inviteCode || '').trim().toUpperCase();
+
+  if (!code) {
+    return null;
+  }
+
+  const snapshot = await firestore
+    .collection('studyCircles')
+    .where('inviteCode', '==', code)
+    .limit(1)
+    .get();
+
+  if (snapshot.empty) {
+    return null;
+  }
+
+  const doc = snapshot.docs[0];
+
+  return {
+    id: doc.id,
+    ...doc.data()
+  };
+};
+
 const getStudyCircles = async () => {
   const firestore = getFirestore();
   const snapshot = await firestore.collection('studyCircles').get();
@@ -1324,6 +1350,76 @@ const getStudyCirclesForUser = async (userId) => {
   return circles.sort((a, b) => {
     return getTimestampMillis(b.createdAt) - getTimestampMillis(a.createdAt);
   });
+};
+
+const joinStudyCircleByInviteCode = async (inviteCode, currentUser = {}) => {
+  const firestore = getFirestore();
+  const code = String(inviteCode || '').trim().toUpperCase();
+  const current = getUserSummary(currentUser);
+
+  if (!code) {
+    throw new Error('Invite code is required');
+  }
+
+  if (!current.id || current.id === 'default-user') {
+    const error = new Error('Please sign in before joining this study circle');
+    error.status = 401;
+    throw error;
+  }
+
+  const circle = await getStudyCircleByInviteCode(code);
+
+  if (!circle) {
+    return null;
+  }
+
+  const circleRef = firestore.collection('studyCircles').doc(circle.id);
+  let result = null;
+
+  await firestore.runTransaction(async (transaction) => {
+    const circleDoc = await transaction.get(circleRef);
+
+    if (!circleDoc.exists) {
+      result = null;
+      return;
+    }
+
+    const currentCircle = {
+      id: circleDoc.id,
+      ...circleDoc.data()
+    };
+    const memberIds = [...new Set((currentCircle.memberIds || []).map(cleanUserId).filter(Boolean))];
+
+    if (memberIds.includes(current.id)) {
+      result = {
+        alreadyMember: true,
+        circle: currentCircle
+      };
+      return;
+    }
+
+    const members = [...new Set([...(currentCircle.members || []), current.displayName].filter(Boolean))];
+    const nextMemberIds = [...new Set([...memberIds, current.id].filter(Boolean))];
+    const updatedCircle = {
+      ...currentCircle,
+      members,
+      memberIds: nextMemberIds
+    };
+
+    transaction.update(circleRef, {
+      members,
+      memberIds: nextMemberIds,
+      ...buildStudyCircleSearchFields(updatedCircle),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    result = {
+      alreadyMember: false,
+      circle: updatedCircle
+    };
+  });
+
+  return result;
 };
 
 const updateStudyCircleInviteNotifications = async (inviteId, status) => {
@@ -2383,8 +2479,10 @@ module.exports = {
   // Study Circles
   saveStudyCircle,
   getStudyCircle,
+  getStudyCircleByInviteCode,
   getStudyCircles,
   getStudyCirclesForUser,
+  joinStudyCircleByInviteCode,
   createStudyCircleInvites,
   leaveStudyCircle,
   deleteStudyCircle,
