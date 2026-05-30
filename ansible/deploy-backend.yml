@@ -4,7 +4,7 @@
   become: true
 
   vars:
-    studyhive_repo_url: "https://github.com/YOUR_USERNAME/study-collab-saas-js.git"
+    studyhive_repo_url: "https://github.com/MrScurra/studyhive-saas.git"
     studyhive_repo_version: "main"
     studyhive_app_dir: "/opt/studyhive"
     studyhive_backend_dir: "{{ studyhive_app_dir }}/backend"
